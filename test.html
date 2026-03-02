@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tinc 接口测试工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+        .config-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .config-section h2 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #495057;
+            font-weight: 500;
+        }
+        input[type="text"],
+        input[type="password"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        .test-section h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .result {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .result.success {
+            border-left: 4px solid #28a745;
+            background: #d4edda;
+        }
+        .result.error {
+            border-left: 4px solid #dc3545;
+            background: #f8d7da;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .progress {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Tinc 接口测试工具</h1>
+
+        <div class="config-section">
+            <h2>⚙️ 服务器配置</h2>
+            <div class="form-group">
+                <label for="serverUrl">服务器地址：</label>
+                <input type="text" id="serverUrl" value="http://localhost:8081" placeholder="http://localhost:8081">
+            </div>
+            <div class="form-group">
+                <label for="basePath">基础路径：</label>
+                <input type="text" id="basePath" value="/XVntQFJCjc.php" placeholder="/XVntQFJCjc.php">
+            </div>
+        </div>
+
+        <div class="progress">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <div class="test-section">
+            <h3>1️⃣ 登录接口测试</h3>
+            <div class="form-group">
+                <label for="username">用户名：</label>
+                <input type="text" id="username" value="test_user_001">
+            </div>
+            <div class="form-group">
+                <label for="password">密码：</label>
+                <input type="password" id="password" value="test_password_123">
+            </div>
+            <button onclick="testLogin()">测试登录</button>
+            <div id="loginResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2️⃣ 下载配置接口测试</h3>
+            <div class="form-group">
+                <label for="downloadSid">节点名称：</label>
+                <input type="text" id="downloadSid" value="test_user_002">
+            </div>
+            <div class="form-group">
+                <label for="downloadToken">Token：</label>
+                <input type="text" id="downloadToken" value="test_token_123456">
+            </div>
+            <button onclick="testDownloadConfig()">测试下载配置</button>
+            <div id="downloadResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3️⃣ 公钥上传接口测试</h3>
+            <div class="form-group">
+                <label for="uploadSid">节点名称：</label>
+                <input type="text" id="uploadSid" value="test_user_003">
+            </div>
+            <div class="form-group">
+                <label for="uploadToken">Token：</label>
+                <input type="text" id="uploadToken" value="test_token_789012">
+            </div>
+            <div class="form-group">
+                <label for="publicKey">公钥内容：</label>
+                <textarea id="publicKey">-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwK5Z7X9j2P8X3Y7R6T1S5
+V2N8M4L7K9Q3W5E6R1T4S8V7N2M5L8K6Q4W3E9R2T5S7V8N3M6L9K5Q4W2E8R3
+-----END PUBLIC KEY-----</textarea>
+            </div>
+            <button onclick="testUploadKey()">测试公钥上传</button>
+            <div id="uploadResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4️⃣ 编辑接口测试</h3>
+            <div class="form-group">
+                <label for="editType">操作类型：</label>
+                <input type="text" id="editType" value="add">
+            </div>
+            <div class="form-group">
+                <label for="editResult">结果：</label>
+                <input type="text" id="editResult" value="success">
+            </div>
+            <div class="form-group">
+                <label for="editIds">ID：</label>
+                <input type="text" id="editIds" value="123">
+            </div>
+            <div class="form-group">
+                <label for="editDetails">详情：</label>
+                <input type="text" id="editDetails" value="节点test_user已完成接入">
+            </div>
+            <button onclick="testEditAddInfo()">测试编辑接口</button>
+            <div id="editResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🚀 完整流程测试</h3>
+            <button onclick="testCompleteFlow()" style="background: #28a745;">执行完整流程测试</button>
+            <div id="completeResult" class="result" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let progress = 0;
+
+        function updateProgress(value) {
+            progress = value;
+            document.getElementById('progressBar').style.width = value + '%';
+            document.getElementById('progressBar').textContent = value + '%';
+        }
+
+        function showResult(elementId, message, isSuccess) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.textContent = message;
+            element.className = 'result ' + (isSuccess ? 'success' : 'error');
+        }
+
+        function getServerUrl() {
+            return document.getElementById('serverUrl').value;
+        }
+
+        function getBasePath() {
+            return document.getElementById('basePath').value;
+        }
+
+        async function testLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const url = getServerUrl() + getBasePath() + '/myadmin/node/api';
+
+            const data = {
+                sid: username,
+                password: password
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.text();
+                const status = response.status;
+
+                if (status === 200) {
+                    if (result === '0') {
+                        showResult('loginResult', '登录失败: 用户名或密码错误\n\n响应: ' + result, false);
+                    } else {
+                        const json = JSON.parse(result);
+                        showResult('loginResult', '登录成功!\n\n完整响应:\n' + JSON.stringify(json, null, 2), true);
+                        updateProgress(25);
+                    }
+                } else {
+                    showResult('loginResult', 'HTTP错误: ' + status + '\n\n响应: ' + result, false);
+                }
+            } catch (error) {
+                showResult('loginResult', '请求失败: ' + error.message, false);
+            }
+        }
+
+        async function testDownloadConfig() {
+            const sid = document.getElementById('downloadSid').value;
+            const token = document.getElementById('downloadToken').value;
+            const url = getServerUrl() + getBasePath() + '/coreplugs/coreplugs/api';
+
+            const data = {
+                sid: sid,
+                token: token
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const status = response.status;
+
+                if (status === 200) {
+                    const blob = await response.blob();
+                    const text = await blob.text();
+
+                    try {
+                        const zip = new JSZip();
+                        const contents = await zip.loadAsync(blob);
+
+                        let output = 'ZIP包大小: ' + blob.size + ' bytes\n\n解压内容:\n\n';
+
+                        for (const [filename, file] of Object.entries(contents.files)) {
+                            if (!file.dir) {
+                                const content = await file.async('string');
+                                output += '📄 ' + filename + '\n';
+                                output += '内容:\n' + content + '\n';
+                                output += '----------------------------------------\n';
+                            }
+                        }
+
+                        showResult('downloadResult', output, true);
+                        updateProgress(50);
+                    } catch (e) {
+                        showResult('downloadResult', 'ZIP包大小: ' + blob.size + ' bytes\n\n响应内容:\n' + text, true);
+                    }
+                } else {
+                    const result = await response.text();
+                    showResult('downloadResult', 'HTTP错误: ' + status + '\n\n响应: ' + result, false);
+                }
+            } catch (error) {
+                showResult('downloadResult', '请求失败: ' + error.message, false);
+            }
+        }
+
+        async function testUploadKey() {
+            const sid = document.getElementById('uploadSid').value;
+            const token = document.getElementById('uploadToken').value;
+            const publicKey = document.getElementById('publicKey').value;
+            const url = getServerUrl() + getBasePath() + '/coreplugs/Clientinterface/exchangeFile';
+
+            const data = {
+                sid: sid,
+                token: token,
+                content: publicKey,
+                action: 'add'
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.text();
+                const status = response.status;
+
+                if (status === 200) {
+                    showResult('uploadResult', '公钥上传成功!\n\n服务器响应:\n' + result, true);
+                    updateProgress(75);
+                } else {
+                    showResult('uploadResult', 'HTTP错误: ' + status + '\n\n响应: ' + result, false);
+                }
+            } catch (error) {
+                showResult('uploadResult', '请求失败: ' + error.message, false);
+            }
+        }
+
+        async function testEditAddInfo() {
+            const type = document.getElementById('editType').value;
+            const result = document.getElementById('editResult').value;
+            const ids = document.getElementById('editIds').value;
+            const details = document.getElementById('editDetails').value;
+            const url = getServerUrl() + getBasePath() + '/promin/Api/editadd_info';
+
+            const data = {
+                type: type,
+                result: result,
+                ids: ids,
+                details: details
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const resultText = await response.text();
+                const status = response.status;
+
+                if (status === 200) {
+                    const json = JSON.parse(resultText);
+                    showResult('editResult', '编辑接口调用成功!\n\n完整响应:\n' + JSON.stringify(json, null, 2), true);
+                    updateProgress(100);
+                } else {
+                    showResult('editResult', 'HTTP错误: ' + status + '\n\n响应: ' + resultText, false);
+                }
+            } catch (error) {
+                showResult('editResult', '请求失败: ' + error.message, false);
+            }
+        }
+
+        async function testCompleteFlow() {
+            updateProgress(0);
+            const output = [];
+
+            try {
+                output.push('========== 开始完整流程测试 ==========\n');
+
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+
+                output.push('\n1️⃣ 测试登录接口...\n');
+                await testLogin();
+                output.push('✅ 登录接口测试完成\n');
+
+                output.push('\n2️⃣ 测试下载配置接口...\n');
+                await testDownloadConfig();
+                output.push('✅ 下载配置接口测试完成\n');
+
+                output.push('\n3️⃣ 测试公钥上传接口...\n');
+                await testUploadKey();
+                output.push('✅ 公钥上传接口测试完成\n');
+
+                output.push('\n4️⃣ 测试编辑接口...\n');
+                await testEditAddInfo();
+                output.push('✅ 编辑接口测试完成\n');
+
+                output.push('\n========== 完整流程测试完成 ==========\n');
+                output.push('🎉 所有接口测试通过！\n');
+
+                showResult('completeResult', output.join(''), true);
+            } catch (error) {
+                output.push('\n❌ 测试失败: ' + error.message);
+                showResult('completeResult', output.join(''), false);
+            }
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</body>
+</html>

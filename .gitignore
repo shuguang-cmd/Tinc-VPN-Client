@@ -1,0 +1,48 @@
+# ==============================
+# C++ 编译生成文件
+# ==============================
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.exe
+*.so
+*.dylib
+
+# ==============================
+# Qt 特有生成文件
+# ==============================
+Makefile*
+*.qmake.stash
+*.user
+*.user.*
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# ==============================
+# 编译输出目录
+# ==============================
+debug/
+release/
+build/
+bin/
+
+# ==============================
+# 操作系统生成文件
+# ==============================
+.DS_Store
+Thumbs.db
+
+# ==============================
+# 本项目特有的运行产生文件
+# ==============================
+# 忽略运行目录下的执行文件和日志，但保留基础目录结构
+demo_win/demo_setup_win/*.exe
+demo_win/demo_setup_win/*.zip
+demo_win/demo_setup_win/conf_log.txt
+demo_win/demo_setup_win/hosts/
+demo_win/demo_setup_win/tinc.conf
+demo_win/demo_setup_win/tinc-up
+demo_win/demo_setup_win/private.txt

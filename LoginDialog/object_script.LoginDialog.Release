@@ -1,0 +1,10 @@
+release/main.o
+release/logindialog.o
+release/confg.o
+release/download.o
+release/background.o
+release/qrc_background.o
+release/moc_logindialog.o
+release/moc_confg.o
+release/moc_download.o
+release/moc_background.o

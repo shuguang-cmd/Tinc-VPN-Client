@@ -1,0 +1,10 @@
+debug/main.o
+debug/logindialog.o
+debug/confg.o
+debug/download.o
+debug/background.o
+debug/qrc_background.o
+debug/moc_logindialog.o
+debug/moc_confg.o
+debug/moc_download.o
+debug/moc_background.o
