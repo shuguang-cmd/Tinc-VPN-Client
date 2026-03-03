@@ -531,6 +531,9 @@ void download::Service_reply(int flag)
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
     loop.exec();
 
+    // 释放 QNetworkReply 对象，防止内存泄漏
+    reply->deleteLater();
+
     confTextEdit->appendPlainText(QString::fromUtf8("添加完成信号已发送"));
 
     // 更新进度到100%

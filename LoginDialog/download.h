@@ -12,7 +12,6 @@
 #include <QApplication>
 #include <QFileInfo>
 #include <QDir>
-#include <QProcess>
 #include <QString>
 #include <QThread>
 #include <QMessageBox>
