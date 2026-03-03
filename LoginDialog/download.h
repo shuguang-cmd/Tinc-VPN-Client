@@ -21,6 +21,10 @@
 #include <QVBoxLayout>
 #include <QGroupBox>
 #include <QPlainTextEdit>
+#include <QPushButton>
+#include <QLabel>
+#include <QHBoxLayout>
+#include <QTimer>
 
 //extern QStringList InterList;//??????????
 //extern QStringList InterList_new;//??????????
@@ -117,6 +121,13 @@ public:
     QNetworkAccessManager *addReply;
     int progressValue;
     QPlainTextEdit *confTextEdit;
+    QGroupBox *progressGroup;
+    QVBoxLayout *progressLayout;
+    QLabel *progressLabel;
+    QPushButton *confirmButton;
+    QPushButton *cancelButton;
+    QPushButton *okButton;
+    QLabel *messageLabel;
 
 
 public slots:
