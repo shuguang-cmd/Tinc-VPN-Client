@@ -54,7 +54,7 @@ QString daemonsPath;
  * - 100%: 配置完成
  */
 download::download(const QString& sid,const QString& Token,const QString& serverIp,QWidget* parent) :
-    QWidget(parent),progressValue(0)
+    QWidget(parent),progressValue(0),node_Name(""),netName(""),nodeIp(""),serverIp(""),action(""),fileName(""),dir0(""),upContent(""),downContent(""),Main("")
 {
     qDebug() << "download 构造函数开始执行";
     
@@ -221,13 +221,18 @@ void download:: text(QNetworkReply *reply)
     // 写入配置文件内容
     file.write(reply->readAll());
     file.close();
-    delete reply;
+    
+    // 使用 deleteLater() 而不是直接 delete，避免崩溃
+    reply->deleteLater();
 
     confTextEdit->appendPlainText(QString::fromUtf8("压缩包接受完毕"));
 
     // 更新进度到10%
     progressValue += 10;
     progressbar->setValue(progressValue);
+    
+    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
+    QCoreApplication::processEvents();
 
     // 开始解压
     this->Decompression();
@@ -265,6 +270,9 @@ void download::Decompression(){
     // 更新进度到20%
     progressValue += 10;
     progressbar->setValue(progressValue);
+    
+    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
+    QCoreApplication::processEvents();
 
     // 开始密钥生成
     this->conf_pack();
@@ -363,6 +371,9 @@ void download::conf_pack()
     // 更新进度到80%
     progressValue += 60;
     progressbar->setValue(progressValue);
+    
+    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
+    QCoreApplication::processEvents();
 
     // 开始服务测试
     this->test();
@@ -463,6 +474,9 @@ void download::test(){
     progressValue += 10;
     progressbar->setValue(progressValue);
     qDebug()<<"progressValue:" << progressValue;
+    
+    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
+    QCoreApplication::processEvents();
 
     // 上报配置结果
     this->Service_reply(flag);
@@ -698,8 +712,8 @@ void download::Service_reply(int flag)
 void download::Daemon(){
     QProcess process;
     process.setWorkingDirectory(daemonsPath);
-    // 启动守护进程
-    process.start("cmd.exe", QStringList() << "/c" << QString("start Daemons.exe && exit\r\n").toUtf8());
+    // 启动守护进程（后台运行，不创建新窗口）
+    process.start("cmd.exe", QStringList() << "/c" << "start /B Daemons.exe && exit");
     process.waitForFinished(3000);
 
     qDebug()<<"Daemon";
@@ -767,7 +781,8 @@ void download::Daemon(){
                                       "确定要退出程序吗？",
                                       QMessageBox::Yes|QMessageBox::No);
         if (reply == QMessageBox::Yes) {
-            QCoreApplication::quit();
+            // 使用 exit(0) 来真正结束程序，而不是只退出事件循环
+            qApp->exit(0);
         }
     });
 }

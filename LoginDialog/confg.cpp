@@ -11,12 +11,13 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
+#include <QTimer>
 
 #include "download.h"
 
 
 confg::confg(const QString& sid,const QString& Token,const QString& serverIp,QWidget *parent) :
-    QWidget(parent),m_mainLayout(nullptr)
+    QWidget(parent),m_mainLayout(nullptr),m_download(nullptr)
 {
     this->setFixedSize(650,500);
     this->setWindowTitle("Tinc内网配置向导");
@@ -133,8 +134,28 @@ void confg::dl(QString sid,QString Token,QString serverIp)
 {
     qDebug() << "开始创建 download 窗口";
     
+    // 清理之前的 download 对象（如果存在）
+    if (!m_download.isNull()) {
+        qDebug() << "清理之前的 download 对象";
+        m_download->close();
+        m_download->deleteLater();
+        m_download = nullptr;
+        
+        // 等待旧对象被销毁
+        QEventLoop loop;
+        QTimer::singleShot(100, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    
     // 创建下载界面，不设置parent以便独立显示
-    download *m_download = new download(sid, Token, serverIp);
+    // 使用成员变量 m_download，而不是局部变量
+    m_download = new download(sid, Token, serverIp, nullptr);
+
+    // 设置 download 对象的父对象为 nullptr，确保它不会被 confg 销毁
+    m_download->setParent(nullptr);
+
+    // 移除 WA_DeleteOnClose 属性，手动管理对象生命周期
+    // m_download->setAttribute(Qt::WA_DeleteOnClose);
 
     // 设置下载界面位置居中
     m_download->move(QApplication::desktop()->screen()->rect().center() - m_download->rect().center());
@@ -144,10 +165,13 @@ void confg::dl(QString sid,QString Token,QString serverIp)
     
     qDebug() << "download 窗口已显示";
 
-    // 关闭当前配置界面
-    this->close();
-    
-    qDebug() << "confg 窗口已关闭";
+    // 延迟关闭当前配置界面，确保 download 对象能够正常工作
+    // 增加延迟时间到 2000ms，确保 download 对象完全初始化
+    QTimer::singleShot(2000, [this]() {
+        qDebug() << "准备关闭 confg 窗口";
+        this->deleteLater();
+        qDebug() << "confg 窗口已关闭";
+    });
 }
 
 confg::~confg()

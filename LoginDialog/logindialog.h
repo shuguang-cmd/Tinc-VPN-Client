@@ -1,4 +1,4 @@
-﻿#ifndef LOGINDIALOG_H
+#ifndef LOGINDIALOG_H
 #define LOGINDIALOG_H
 
 #include <QWidget>
@@ -12,9 +12,9 @@
 #include <QNetworkReply>
 #include <QUrl>
 #include <QPainter>
+#include <QPointer>
 
-
-#include "confg.h"
+class confg;
 
 class Logindialog : public QWidget
 {
@@ -51,6 +51,7 @@ private:
     QNetworkAccessManager *manager;
     QString serverIp;
     QString parentpath;//路径
+    QPointer<confg> m_confg;
 
 signals:
     void closed();

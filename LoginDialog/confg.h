@@ -1,4 +1,4 @@
-﻿#ifndef CONFG_H
+#ifndef CONFG_H
 #define CONFG_H
 
 #include <QWidget>
@@ -8,6 +8,7 @@
 #include <QCloseEvent>
 #include <QDesktopWidget>
 #include <QVBoxLayout>
+#include <QPointer>
 
 #include "logindialog.h"
 #include "download.h"
@@ -29,7 +30,7 @@ private:
     QPushButton *startBtn;
     QPushButton *cancelBtn;
     QVBoxLayout *m_mainLayout;
-    download *m_download;
+    QPointer<download> m_download;
 
     QLabel *intr;
     QLabel *nod;

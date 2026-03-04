@@ -1,5 +1,6 @@
 #include "logindialog.h"
 #include "download.h"
+#include "confg.h"
 
 #include <QWidget>
 #include <QPushButton>
@@ -24,7 +25,7 @@
 QString Login_Api;//登录Api
 
 Logindialog::Logindialog(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent),m_confg(nullptr)
 {
     setAttribute(Qt::WA_TranslucentBackground);  //设置窗口背景透明
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowMinMaxButtonsHint);
@@ -317,15 +318,31 @@ void Logindialog::getBack(QNetworkReply *reply)
             emit closed();
             this->close();
             
-            // 创建 confg 对象，不设置 parent 以便独立显示
-            confg *cf = new confg(sid,Token,serverIp);
+            // 清理之前的 confg 对象（如果存在）
+            if (!m_confg.isNull()) {
+                qDebug() << "清理之前的 confg 对象";
+                m_confg->close();
+                m_confg->deleteLater();
+                m_confg = nullptr;
+                
+                // 等待旧对象被销毁
+                QEventLoop loop;
+                QTimer::singleShot(100, &loop, &QEventLoop::quit);
+                loop.exec();
+            }
+            
+            // 创建 confg 对象，使用成员变量以便管理生命周期
+            m_confg = new confg(sid,Token,serverIp);
             QRect availableGeometry = QApplication::desktop()->availableGeometry();
-            int x = (availableGeometry.width() - cf->width()) / 2;
-            int y = (availableGeometry.height() - cf->height()) / 2;
-            cf->move(x, y);
-            cf->show();
+            int x = (availableGeometry.width() - m_confg->width()) / 2;
+            int y = (availableGeometry.height() - m_confg->height()) / 2;
+            m_confg->move(x, y);
+            m_confg->show();
             
             qDebug() << "confg 窗口已创建并显示";
+            
+            // 设置 confg 对象的父对象为 nullptr，确保它不会被 logindialog 销毁
+            m_confg->setParent(nullptr);
         }
     }
 }
