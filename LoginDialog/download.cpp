@@ -56,6 +56,8 @@ QString daemonsPath;
 download::download(const QString& sid,const QString& Token,const QString& serverIp,QWidget* parent) :
     QWidget(parent),progressValue(0)
 {
+    qDebug() << "download 构造函数开始执行";
+    
     // 移除 WA_DeleteOnClose 属性，防止窗口被意外关闭
     // this->setAttribute(Qt::WA_DeleteOnClose);
 
@@ -131,7 +133,8 @@ download::download(const QString& sid,const QString& Token,const QString& server
     mainLayout->addWidget(outputGroup);
 
     this->setLayout(mainLayout);
-    this->setWindowFlags(Qt::Widget);
+    // 移除这行，不要设置窗口标志为 Qt::Widget
+    // this->setWindowFlags(Qt::Widget);
 
     // 保存参数
     SId = sid;
@@ -542,13 +545,31 @@ void download::Service_reply(int flag)
     qDebug()<<"进度更新到100%";
 
     // 延迟1秒后显示下一步按钮
-    QTimer::singleShot(1000, [this]() {
+    qDebug()<<"准备显示下一步按钮";
+    
+    // 使用 QPointer 保护 this 指针，防止在 lambda 中变成悬空指针
+    QPointer<download> self(this);
+    
+    QTimer::singleShot(1000, [self]() {
+        qDebug()<<"开始显示下一步按钮";
+        
+        // 检查对象是否还存在
+        if (self.isNull()) {
+            qDebug()<<"警告：download 对象已被销毁，无法显示下一步按钮";
+            return;
+        }
+        
+        if (!self->isVisible()) {
+            qDebug()<<"警告：download窗口已关闭，无法显示下一步按钮";
+            return;
+        }
+
         // 清除进度标签
-        progressLayout->removeWidget(progressLabel);
-        progressLabel->deleteLater();
+        self->progressLayout->removeWidget(self->progressLabel);
+        self->progressLabel->deleteLater();
 
         // 创建下一步按钮
-        QPushButton *nextButton = new QPushButton("下一步", this);
+        QPushButton *nextButton = new QPushButton("下一步", self);
         nextButton->setFont(QFont("宋体", 9));
         nextButton->setMinimumSize(120, 35);
         nextButton->setStyleSheet(
@@ -569,22 +590,22 @@ void download::Service_reply(int flag)
             );
 
         // 将下一步按钮添加到进度布局
-        progressLayout->addWidget(nextButton);
+        self->progressLayout->addWidget(nextButton);
 
         // 连接下一步按钮信号
-        connect(nextButton, &QPushButton::clicked, this, [this, nextButton]() {
+        connect(nextButton, &QPushButton::clicked, self, [self, nextButton]() {
             // 清除进度条和下一步按钮
-            progressLayout->removeWidget(progressbar);
-            progressLayout->removeWidget(nextButton);
-            progressbar->deleteLater();
+            self->progressLayout->removeWidget(self->progressbar);
+            self->progressLayout->removeWidget(nextButton);
+            self->progressbar->deleteLater();
             nextButton->deleteLater();
 
             // 创建消息标签
-            messageLabel = new QLabel("Tinc VPN配置已完成！\n\n配置进度：100%\n\n是否启动守护进程并完成配置？", this);
-            messageLabel->setFont(QFont("宋体", 10));
-            messageLabel->setAlignment(Qt::AlignCenter);
-            messageLabel->setWordWrap(true);
-            messageLabel->setStyleSheet(
+            self->messageLabel = new QLabel("Tinc VPN配置已完成！\n\n配置进度：100%\n\n是否启动守护进程并完成配置？", self);
+            self->messageLabel->setFont(QFont("宋体", 10));
+            self->messageLabel->setAlignment(Qt::AlignCenter);
+            self->messageLabel->setWordWrap(true);
+            self->messageLabel->setStyleSheet(
                 "QLabel {"
                 "   padding: 20px;"
                 "   background-color: #E8F5E9;"
@@ -597,10 +618,10 @@ void download::Service_reply(int flag)
             buttonLayout->setSpacing(20);
 
             // 创建确认按钮
-            confirmButton = new QPushButton("确认", this);
-            confirmButton->setFont(QFont("宋体", 9));
-            confirmButton->setMinimumSize(100, 30);
-            confirmButton->setStyleSheet(
+            self->confirmButton = new QPushButton("确认", self);
+            self->confirmButton->setFont(QFont("宋体", 9));
+            self->confirmButton->setMinimumSize(100, 30);
+            self->confirmButton->setStyleSheet(
                 "QPushButton {"
                 "   background-color: #4CAF50;"
                 "   color: white;"
@@ -617,10 +638,10 @@ void download::Service_reply(int flag)
                 );
 
             // 创建取消按钮
-            cancelButton = new QPushButton("取消", this);
-            cancelButton->setFont(QFont("宋体", 9));
-            cancelButton->setMinimumSize(100, 30);
-            cancelButton->setStyleSheet(
+            self->cancelButton = new QPushButton("取消", self);
+            self->cancelButton->setFont(QFont("宋体", 9));
+            self->cancelButton->setMinimumSize(100, 30);
+            self->cancelButton->setStyleSheet(
                 "QPushButton {"
                 "   background-color: #f44336;"
                 "   color: white;"
@@ -637,30 +658,27 @@ void download::Service_reply(int flag)
                 );
 
             // 添加按钮到布局
-            buttonLayout->addWidget(confirmButton);
-            buttonLayout->addWidget(cancelButton);
+            buttonLayout->addWidget(self->confirmButton);
+            buttonLayout->addWidget(self->cancelButton);
 
             // 将消息和按钮添加到进度布局
-            progressLayout->addWidget(messageLabel);
-            progressLayout->addLayout(buttonLayout);
+            self->progressLayout->addWidget(self->messageLabel);
+            self->progressLayout->addLayout(buttonLayout);
 
             // 更新进度组标题
-            progressGroup->setTitle("配置完成");
+            self->progressGroup->setTitle("配置完成");
 
             // 连接按钮信号
-            connect(confirmButton, &QPushButton::clicked, this, [this]() {
-                confTextEdit->appendPlainText(QString::fromUtf8("用户确认完成配置"));
-                this->Daemon();
+            connect(self->confirmButton, &QPushButton::clicked, self, [self]() {
+                self->confTextEdit->appendPlainText(QString::fromUtf8("用户确认完成配置"));
+                self->Daemon();
             });
 
-            connect(cancelButton, &QPushButton::clicked, this, [this]() {
-                confTextEdit->appendPlainText(QString::fromUtf8("用户取消配置"));
+            connect(self->cancelButton, &QPushButton::clicked, self, [self]() {
+                self->confTextEdit->appendPlainText(QString::fromUtf8("用户取消配置"));
                 QCoreApplication::quit();
             });
         });
-
-        // 更新进度组标题
-        progressGroup->setTitle("配置完成");
     });
 }
 
@@ -763,5 +781,5 @@ void download::Daemon(){
  */
 download::~download()
 {
-
+    qDebug() << "download 析构函数被调用，窗口即将被销毁";
 }

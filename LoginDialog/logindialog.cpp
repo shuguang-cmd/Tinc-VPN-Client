@@ -316,12 +316,16 @@ void Logindialog::getBack(QNetworkReply *reply)
             qDebug() << Token;
             emit closed();
             this->close();
+            
+            // 创建 confg 对象，不设置 parent 以便独立显示
             confg *cf = new confg(sid,Token,serverIp);
             QRect availableGeometry = QApplication::desktop()->availableGeometry();
             int x = (availableGeometry.width() - cf->width()) / 2;
             int y = (availableGeometry.height() - cf->height()) / 2;
             cf->move(x, y);
             cf->show();
+            
+            qDebug() << "confg 窗口已创建并显示";
         }
     }
 }

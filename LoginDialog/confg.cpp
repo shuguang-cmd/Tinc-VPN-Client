@@ -131,6 +131,8 @@ void confg::cancel()
 
 void confg::dl(QString sid,QString Token,QString serverIp)
 {
+    qDebug() << "开始创建 download 窗口";
+    
     // 创建下载界面，不设置parent以便独立显示
     download *m_download = new download(sid, Token, serverIp);
 
@@ -139,9 +141,13 @@ void confg::dl(QString sid,QString Token,QString serverIp)
 
     // 显示下载界面
     m_download->show();
+    
+    qDebug() << "download 窗口已显示";
 
     // 关闭当前配置界面
     this->close();
+    
+    qDebug() << "confg 窗口已关闭";
 }
 
 confg::~confg()

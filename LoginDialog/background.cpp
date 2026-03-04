@@ -1,4 +1,4 @@
-﻿#include "background.h"
+#include "background.h"
 
 background::background(QWidget *parent) : QMainWindow(parent)
 {
@@ -36,7 +36,8 @@ background::background(QWidget *parent) : QMainWindow(parent)
             }
         });
 
-    connect(childWidget, SIGNAL(closed()), this, SLOT(close()));
+    // 注释掉这个连接，防止 Logindialog 关闭时导致 background 关闭
+    // connect(childWidget, SIGNAL(closed()), this, SLOT(close()));
 }
 
 void background::moveEvent(QMoveEvent *event)
