@@ -91,6 +91,20 @@ void conf_package::generate_key(){
         qDebug() << "Created hosts directory:" << hostsDir;
     }
     
+    // 删除旧密钥文件，防止tincd.exe生成OLD版本
+    QString oldPrivKey = workDir + "\\rsa_key.priv";
+    QString oldPubKey = hostsDir + "\\" + SId;
+    
+    if (QFile::exists(oldPrivKey)) {
+        QFile::remove(oldPrivKey);
+        qDebug() << "Removed old private key:" << oldPrivKey;
+    }
+    
+    if (QFile::exists(oldPubKey)) {
+        QFile::remove(oldPubKey);
+        qDebug() << "Removed old public key:" << oldPubKey;
+    }
+    
     // 创建进程对象并设置工作目录
     QProcess p;
     p.setWorkingDirectory(workDir);
