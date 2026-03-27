@@ -13,6 +13,11 @@
 #include <QUrl>
 #include <QPainter>
 #include <QPointer>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
+#include "AnimatedCharacter.h"
 
 class confg;
 
@@ -31,8 +36,12 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
+    AnimatedCharacter *character;
     QLabel *Title;
     QLabel *Sid;
     QLabel *password;
@@ -50,8 +59,16 @@ private:
     QByteArray PrivateArray;
     QNetworkAccessManager *manager;
     QString serverIp;
-    QString parentpath;//路径
+    QString parentpath;
     QPointer<confg> m_confg;
+    
+    QWidget *loginCard;
+    QVBoxLayout *mainLayout;
+    QVBoxLayout *cardLayout;
+    QHBoxLayout *buttonLayout;
+    QGraphicsDropShadowEffect *shadowEffect;
+    
+    QPoint m_dragPosition;
 
 signals:
     void closed();

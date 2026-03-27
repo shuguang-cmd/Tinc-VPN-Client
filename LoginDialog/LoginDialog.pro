@@ -37,7 +37,8 @@ HEADERS += \
         logindialog.h \
     confg.h \
     download.h \
-    background.h
+    background.h \
+    AnimatedCharacter.h
 
 FORMS +=
 

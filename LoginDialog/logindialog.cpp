@@ -27,104 +27,178 @@ QString Login_Api;//登录Api
 Logindialog::Logindialog(QWidget *parent)
     : QWidget(parent),m_confg(nullptr)
 {
-    setAttribute(Qt::WA_TranslucentBackground);  //设置窗口背景透明
+    setAttribute(Qt::WA_TranslucentBackground);
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowMinMaxButtonsHint);
+    this->setFixedSize(400, 500); // Adjusted size to match background.cpp
+    setMouseTracking(true);
 
-    QFont T_ft;
-    T_ft.setFamily("楷体");
-    T_ft.setPointSize(32);
-    QFont ft;
-    ft.setPointSize(17);
-    ft.setFamily("STKaiti");
-    QFont FT;
-    FT.setPointSize(14);
-    FT.setFamily("STKaiti");
+    mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
 
-    Title=new QLabel(QWidget::tr("Sign In"));
-    Title->setGeometry(435,-75,300,250);
-    Title->setFont(T_ft);
-    Title->setStyleSheet("color:#696969;");
-    Title->setParent(this);
+    loginCard = new QWidget(this);
+    loginCard->setObjectName("loginCard");
+    loginCard->setFixedSize(360, 460); // Centered and taller
+    loginCard->setMouseTracking(true);
 
-    uN=new QLineEdit;
-    uN->setGeometry(400,110,220,40);
-    uN->setMaximumSize(220,40);
-    uN->setPlaceholderText("UserName");
-    uN->setMaxLength(12);
+    cardLayout = new QVBoxLayout(loginCard);
+    cardLayout->setContentsMargins(40, 20, 40, 40);
+    cardLayout->setSpacing(15);
+
+    character = new AnimatedCharacter(loginCard);
+    character->setMouseTracking(true);
+    
+    Title = new QLabel("VPN TERMINAL", loginCard);
+    Title->setObjectName("loginTitle");
+    Title->setAlignment(Qt::AlignCenter);
+    Title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    Title->setMouseTracking(true);
+
+    uN = new QLineEdit(loginCard);
+    uN->setObjectName("loginInput");
+    uN->setPlaceholderText("请输入用户名...");
     uN->setClearButtonEnabled(true);
-    uN->setParent(this);
+    uN->setMaxLength(12);
+    uN->setMinimumHeight(45);
+    uN->setMouseTracking(true);
+    uN->installEventFilter(this);
 
-    pw=new QLineEdit;
-    pw->setGeometry(400,190,220,40);
-    pw->setMaximumSize(220,40);
-    pw->setPlaceholderText("PassWord");
+    pw = new QLineEdit(loginCard);
+    pw->setObjectName("loginInput");
+    pw->setPlaceholderText("请输入密码...");
     pw->setEchoMode(QLineEdit::Password);
     pw->setClearButtonEnabled(true);
     pw->setMaxLength(12);
-    pw->setParent(this);
+    pw->setMinimumHeight(45);
+    pw->setMouseTracking(true);
+    pw->installEventFilter(this);
 
-    loginbtn=new QPushButton;
-    loginbtn->setText("sign in");
-    loginbtn->setFont(QFont("仿宋",12));
-    loginbtn->setGeometry(385,285,100,30);
-    loginbtn->setFixedSize(85,30);
-    loginbtn->setParent(this);
-    loginbtn->setShortcut(Qt::Key_Return);//只能与大回车键相连，无法同时链接两个回车键
+    buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(20);
 
-    exitbtn=new QPushButton;
-    exitbtn->setText("sign out");
-    exitbtn->setFont(QFont("仿宋",12));
-    exitbtn->setGeometry(550,285,100,30);
-    exitbtn->setFixedSize(85,30);
-    exitbtn->setParent(this);
+    loginbtn = new QPushButton("登录", loginCard);
+    loginbtn->setObjectName("loginButton");
+    loginbtn->setMinimumSize(120, 40);
+    loginbtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    loginbtn->setShortcut(Qt::Key_Return);
 
-    this->setFixedSize(950,600);
+    exitbtn = new QPushButton("退出", loginCard);
+    exitbtn->setObjectName("exitButton");
+    exitbtn->setMinimumSize(120, 40);
+    exitbtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-    // QString programPath = QDir::currentPath();
-    // QFileInfo fileInfo(programPath);
-    // QDir parentDir = fileInfo.dir().path();
-    // parentpath = parentDir.path();
+    buttonLayout->addWidget(loginbtn);
+    buttonLayout->addWidget(exitbtn);
+
+    cardLayout->addWidget(character, 0, Qt::AlignCenter);
+    cardLayout->addWidget(Title);
+    cardLayout->addWidget(uN);
+    cardLayout->addWidget(pw);
+    cardLayout->addLayout(buttonLayout);
+    cardLayout->addStretch();
+
+    mainLayout->addWidget(loginCard, 0, Qt::AlignCenter);
+
     parentpath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows";
     qDebug() << parentpath;
 
-    connect(loginbtn,&QPushButton::clicked,this,&Logindialog::login);
-    connect(exitbtn,&QPushButton::clicked,this,&Logindialog::close);
+    connect(loginbtn, &QPushButton::clicked, this, &Logindialog::login);
+    connect(exitbtn, &QPushButton::clicked, this, &Logindialog::close);
     manager = new QNetworkAccessManager(this);
-    connect(manager,&QNetworkAccessManager::finished,this,&Logindialog::getBack);//通信完成后自动执行getBack
+    connect(manager, &QNetworkAccessManager::finished, this, &Logindialog::getBack);
+
+    QString qss = R"(
+        Logindialog {
+            background: transparent;
+        }
+        
+        QWidget#loginCard {
+            background-color: white;
+            border-radius: 15px;
+        }
+        
+        QLabel#loginTitle {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333333;
+            padding: 10px;
+        }
+        
+        QLineEdit#loginInput {
+            background-color: #f5f5f5;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            color: #333333;
+        }
+        
+        QLineEdit#loginInput:focus {
+            border: 2px solid #667eea;
+            background-color: white;
+        }
+        
+        QPushButton#loginButton {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                stop:0 #667eea, stop:1 #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+        }
+        
+        QPushButton#loginButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                stop:0 #5568d3, stop:1 #6388b8);
+        }
+        
+        QPushButton#loginButton:pressed {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                stop:0 #4456a2, stop:1 #517a7a);
+        }
+        
+        QPushButton#exitButton {
+            background-color: #f5f5f5;
+            color: #666666;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+        }
+        
+        QPushButton#exitButton:hover {
+            background-color: #e0e0e0;
+            color: #333333;
+        }
+        
+        QPushButton#exitButton:pressed {
+            background-color: #d0d0d0;
+        }
+    )";
+    this->setStyleSheet(qss);
 }
 
 void Logindialog::paintEvent(QPaintEvent *event)
 {
-    QPainter painter(this); // 创建一个QPainter对象并指定绘制设备为this，即当前窗口
-    painter.setRenderHint(QPainter::Antialiasing); // 设置绘制选项为反锯齿，使绘制的图形边缘更加平滑
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
 
-    QColor color(0, 0, 0, 50);
-    // 绘制窗口四周的阴影
-    for(int i = 0; i < 10; i++)
+    // Use a soft blue-ish shadow instead of black
+    QColor shadowColor(102, 126, 234, 15); 
+    
+    for(int i = 0; i < 15; i++)
     {
-        // 1. 绘制阴影的路径
         QPainterPath path;
-        // 2. 设置填充规则
         path.setFillRule(Qt::WindingFill);
-        // 3. 添加一个圆角矩形
-        path.addRoundedRect(QRect(10 - i, 10 - i, this->width() - (10 - i) * 2, this->height() - (10 - i) * 2), 15, 15);
-        // 4. 设置颜色的透明度
-        color.setAlpha(150 - qSqrt(i) * 45);
-        painter.setPen(Qt::NoPen); // 不绘制边框线
-        painter.setBrush(color); // 设置画刷颜色为阴影颜色
-        // 5. 绘制阴影
+        path.addRoundedRect(QRect(15 - i, 15 - i, this->width() - (15 - i) * 2, this->height() - (15 - i) * 2), 15, 15);
+        shadowColor.setAlpha(40 - i * 2);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(shadowColor);
         painter.drawPath(path);
     }
-
-    QRectF rect(0, 0, 650, 400); // 获取当前窗口的矩形区域
-    // 绘制整个窗口的圆角矩形，填充颜色为白色
-    painter.setBrush(QBrush(QColor(245,245,245))); // 设置画刷颜色为灰色
-    painter.setPen(Qt::transparent); // 设置画笔颜色为透明，即不绘制边框线
-    painter.drawRoundedRect(rect, 15, 15); // 绘制一个带有圆角的矩形窗口，圆角半径为15px，如果把窗口设置成正方形，圆角半径设大，就会变成一个圆
-
-    QPixmap pixmap(":/Icon/backgroud_Login.png");
-    painter.drawPixmap(-7, -7, pixmap);
-
 }
 
 QString Logindialog::severIp_conf()
@@ -350,6 +424,35 @@ void Logindialog::getBack(QNetworkReply *reply)
 Logindialog::~Logindialog()
 {
 
+}
+
+void Logindialog::mousePressEvent(QMouseEvent *event)
+{
+    // Dragging disabled to keep it fixed to the main frame
+    QWidget::mousePressEvent(event);
+}
+
+void Logindialog::mouseMoveEvent(QMouseEvent *event)
+{
+    // Still update eye tracking
+    if (character) {
+        character->setTargetPos(event->globalPos());
+    }
+    
+    // Dragging logic removed
+    QWidget::mouseMoveEvent(event);
+}
+
+bool Logindialog::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == pw) {
+        if (event->type() == QEvent::FocusIn) {
+            character->setCoverEyes(true);
+        } else if (event->type() == QEvent::FocusOut) {
+            character->setCoverEyes(false);
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 

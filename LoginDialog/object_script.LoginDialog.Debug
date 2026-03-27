@@ -8,3 +8,4 @@ debug/moc_logindialog.o
 debug/moc_confg.o
 debug/moc_download.o
 debug/moc_background.o
+debug/moc_AnimatedCharacter.o
