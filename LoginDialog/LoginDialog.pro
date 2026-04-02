@@ -50,3 +50,5 @@ RC_FILE += res.rc
 
 RESOURCES += \
     background.qrc
+    
+CONFIG += console

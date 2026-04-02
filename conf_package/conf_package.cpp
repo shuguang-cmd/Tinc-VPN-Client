@@ -69,11 +69,11 @@ conf_package::conf_package(const QString& tem_SId,const QString& tem_token,const
 void conf_package::generate_key(){
     qDebug() << "Generating keys...";
     
-    // 构建tincd.exe的完整路径（使用Windows原生路径分隔符）
+    // 构建tincd.exe的完整路径
     QString tincdPath = my_savePath + "\\tincd.exe";
     qDebug()<< "tincd path:" << tincdPath;
     
-    // 构建工作目录：Tinc根目录/网络名称（使用Windows原生路径分隔符）
+    // 构建工作目录：Tinc根目录/网络名称
     QString workDir = my_savePath + "\\" + my_netName;
     qDebug()<< "Working directory:" << workDir;
     
@@ -84,14 +84,14 @@ void conf_package::generate_key(){
         qDebug() << "Created directory:" << workDir;
     }
     
-    // 检查并创建hosts子目录（用于存放公钥文件）
+    // 检查并创建hosts子目录
     QString hostsDir = workDir + "\\hosts";
     if (!dir.exists(hostsDir)) {
         dir.mkpath(hostsDir);
         qDebug() << "Created hosts directory:" << hostsDir;
     }
     
-    // 删除旧密钥文件，防止tincd.exe生成OLD版本
+    // 1. 斩草除根：删除旧密钥文件
     QString oldPrivKey = workDir + "\\rsa_key.priv";
     QString oldPubKey = hostsDir + "\\" + SId;
     
@@ -99,58 +99,88 @@ void conf_package::generate_key(){
         QFile::remove(oldPrivKey);
         qDebug() << "Removed old private key:" << oldPrivKey;
     }
-    
     if (QFile::exists(oldPubKey)) {
         QFile::remove(oldPubKey);
         qDebug() << "Removed old public key:" << oldPubKey;
     }
     
-    // 创建进程对象并设置工作目录
+    // ==========================================
+    // 2. 启动进程生成密钥
+    // ==========================================
     QProcess p;
-    p.setWorkingDirectory(workDir);
+    p.setWorkingDirectory(workDir); // 设置工作目录极为重要
     
-    // 启动tincd.exe生成密钥：-n 指定网络名，-K 表示生成密钥
+    qDebug() << "开始启动 tincd -K...";
     p.start(tincdPath, QStringList() << "-n" << my_netName << "-K");
     
-    // 检查进程是否成功启动
-    if (!p.waitForStarted()) {
-        qDebug() << "Failed to start tincd process";
+    if (!p.waitForStarted(3000)) {
+        qDebug() << "致命错误：无法启动 tincd.exe，请检查路径是否正确！";
         return;
     }
     
-    // 等待tincd.exe提示输入（等待2秒让tincd.exe启动）
-    QThread::msleep(2000);
+    // 稍微等一下，等 tincd 吐出提示信息
+    QThread::msleep(500); 
+
+    // 【致命修补 1 & 2】：灌入两次回车，并立即关闭写入通道！
+    qDebug() << "向进程注入双回车...";
+    p.write("\n\n"); 
+    p.closeWriteChannel(); // 告诉 tincd 输入已结束，别等了！
     
-    // 提供回车键来确认默认的保存位置
-    p.write("\r\n");
-    
-    // 等待进程完成，最多等待30秒
-    if (!p.waitForFinished(30000)) {
-        qDebug() << "tincd process timeout";
+    // 等待进程完成
+    if (!p.waitForFinished(15000)) {
+        qDebug() << "tincd process timeout! (可能依然卡在交互提示上)";
         p.kill();
         return;
     }
     
-    // 获取进程退出码和输出信息
     int exitCode = p.exitCode();
-    QString output = QString::fromLocal8Bit(p.readAllStandardOutput());
-    QString error = QString::fromLocal8Bit(p.readAllStandardError());
-    
     qDebug() << "tincd exit code:" << exitCode;
-    qDebug() << "tincd output:" << output;
-    if (!error.isEmpty()) {
-        qDebug() << "tincd error:" << error;
+    qDebug() << "tincd output:\n" << QString::fromLocal8Bit(p.readAllStandardOutput());
+    QString errorOutput = QString::fromLocal8Bit(p.readAllStandardError());
+    if (!errorOutput.isEmpty()) {
+        qDebug() << "tincd error:\n" << errorOutput;
     }
     
-    // 检查密钥生成是否成功（退出码为0表示成功）
     if (exitCode != 0) {
         qDebug() << "tincd failed with exit code:" << exitCode;
         return;
     }
     
-    qDebug() << "Key generation completed successfully";
+    qDebug() << "纯 RSA 密钥生成成功，准备注入 Subnet...";
+
+   // ==========================================
+    // 3. 【致命修补 3】：强行向公钥注入 Subnet
+    // ==========================================
     
-    // 密钥生成成功，开始上传公钥
+    // 打印出来看看，到底传进来的 nodeIp 是个啥！
+    qDebug() << "准备注入公钥，当前类中保存的 nodeIp 是：" << nodeIp;
+
+    QFile hostFile(oldPubKey); // 就是刚才生成的 hosts 下的文件
+    if (hostFile.open(QIODevice::ReadWrite | QIODevice::Text)) {
+        QByteArray keyContent = hostFile.readAll(); 
+        
+        hostFile.resize(0); // 清空
+        
+        QTextStream out(&hostFile);
+        
+        // 如果发现传进来的还是 127.0.0.1 或者空的，那就在这里写死做个终极测试！
+        if (nodeIp.isEmpty() || nodeIp == "127.0.0.1") {
+            qDebug() << "警告！传进来的 IP 依然不对，强制使用硬编码测试 IP！";
+            out << "Subnet = 12.12.12.12/32\n\n"; 
+        } else {
+            out << "Subnet = " << nodeIp << "/32\n\n"; 
+        }
+        
+        out << keyContent; 
+        
+        hostFile.close();
+        qDebug() << "成功注入 Subnet。";
+    } else {
+        qDebug() << "警告：无法打开公钥文件进行 Subnet 注入！路径：" << oldPubKey;
+    }
+    
+    // 4. 上传公钥到服务器
+    // ==========================================
     uploadPublicKey();
 }
 

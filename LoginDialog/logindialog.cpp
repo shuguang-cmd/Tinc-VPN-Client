@@ -307,20 +307,25 @@ void Logindialog::getBack(QNetworkReply *reply)
                     return;
                 }
 
+                // 👇 提取 JSON 里的数据（重点增加 node_ip）
                 QString sid = jsonObj.value("sid").toString();
                 QString token = jsonObj.value("token").toString();
                 QString netName = jsonObj.value("net_name").toString();
+                QString nodeIp = jsonObj.value("node_ip").toString(); // 👈 新增：提取分配的虚拟 IP
 
                 QTextStream stream(&priFile);
                 stream << "sid:" << sid << "\n";
                 stream << "token:" << token << "\n";
                 stream << "net_name:" << netName << "\n";
                 stream << "server_ip:" << serverIp << "\n";
+                stream << "node_ip:" << nodeIp << "\n"; // 👈 新增：写入 private.txt
 
                 qDebug() << "写入 private.txt 成功";
                 qDebug() << "sid:" << sid;
                 qDebug() << "token:" << token;
                 qDebug() << "net_name:" << netName;
+                qDebug() << "server_ip:" << serverIp;
+                qDebug() << "node_ip:" << nodeIp; // 👈 打印出来确认一下！
 
                 if(stream.status() != QTextStream::Ok)
                 {
