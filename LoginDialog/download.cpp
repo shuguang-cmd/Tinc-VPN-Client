@@ -304,7 +304,7 @@ void download::conf_pack()
 {
     action = "add";
     // 从private.txt读取节点IP
-    nodeIp = getMess("server_ip");
+    nodeIp = getMess("node_ip");
     // 从private.txt读取网络名称
     netName = getMess("net_name");
     qDebug()<<nodeIp;
