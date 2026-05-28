@@ -6,7 +6,7 @@ QStringList InterList;
 // 下载配置文件的API地址
 QString Download_Api;
 // Tinc VPN服务安装目录
-QString my_savePath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/Tinc";
+QString my_savePath;
 // 编辑信息的API地址
 QString Edit_Api;
 // 父目录（预留，当前未使用）
@@ -142,9 +142,25 @@ download::download(const QString& sid,const QString& Token,const QString& server
     server_Ip = serverIp;
     qDebug() << SId << token<<server_Ip;
 
-    // 设置路径
-    daemonsPath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/demo_win/demo_setup_win/Daemons";
-    confPack_Path = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/demo_win/demo_setup_win/conf_package";
+    // 动态计算路径（从可执行文件位置推导）
+    QString appPath = QCoreApplication::applicationDirPath();
+    QDir appDir(appPath);
+    
+    // 假设在开发环境下 appPath 是 .../LoginDialog/build/debug/
+    // 我们需要向上跳三级到达 code_win 目录
+    appDir.cdUp(); // build
+    appDir.cdUp(); // LoginDialog
+    appDir.cdUp(); // code_win
+    
+    QString parentpath = appDir.absolutePath();
+    my_savePath = QDir(parentpath).absoluteFilePath("Tinc");
+    confPack_Path = QDir(parentpath).absoluteFilePath("conf_package");
+    daemonsPath = QDir(parentpath).absoluteFilePath("Daemons");
+    
+    qDebug() << "Root Path:" << parentpath;
+    qDebug() << "Tinc Path:" << my_savePath;
+    qDebug() << "Conf Package Path:" << confPack_Path;
+    
     confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 配置路径: " + confPack_Path);
     qDebug()<<confPack_Path;
     confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 守护进程路径: " +daemonsPath);
@@ -183,21 +199,6 @@ download::download(const QString& sid,const QString& Token,const QString& server
 }
 
 /**
- * @brief 延迟函数
- * @param mSec 延迟毫秒数
- * 
- * 功能说明：
- * - 阻塞当前线程指定毫秒数
- * - 用于等待异步操作完成
- */
-void delay(int mSec)
-{
-    QEventLoop loop;
-    QTimer::singleShot(mSec,&loop,SLOT(quit()));
-    loop.exec();
-}
-
-/**
  * @brief 处理下载配置文件的响应
  * @param reply 网络响应对象
  * 
@@ -214,27 +215,44 @@ void delay(int mSec)
  */
 void download:: text(QNetworkReply *reply)
 {
-    // 创建配置文件
-    QFile file(my_savePath + "/configure.zip");
-    file.open(QIODevice::WriteOnly);
+    // 检查网络错误
+    if (reply->error() != QNetworkReply::NoError) {
+        confTextEdit->appendPlainText("下载失败: " + reply->errorString());
+        QMessageBox::StandardButton btn = QMessageBox::critical(this,
+            "下载失败", "配置文件下载失败: " + reply->errorString() + "\n\n是否重试？",
+            QMessageBox::Retry | QMessageBox::Cancel);
+        reply->deleteLater();
+        if (btn == QMessageBox::Retry) {
+            // 重新发送下载请求
+            QJsonObject json;
+            json.insert("sid", SId);
+            json.insert("token", token);
+            QJsonDocument document;
+            document.setObject(json);
+            QByteArray dataArray = document.toJson(QJsonDocument::Compact);
+            QNetworkRequest req;
+            req.setUrl(QUrl(Download_Api));
+            req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+            qnam->post(req, dataArray);
+        }
+        return;
+    }
 
-    // 写入配置文件内容
+    QFile file(my_savePath + "/configure.zip");
+    if (!file.open(QIODevice::WriteOnly)) {
+        confTextEdit->appendPlainText("写入文件失败: " + file.errorString());
+        reply->deleteLater();
+        return;
+    }
+
     file.write(reply->readAll());
     file.close();
-    
-    // 使用 deleteLater() 而不是直接 delete，避免崩溃
     reply->deleteLater();
 
-    confTextEdit->appendPlainText(QString::fromUtf8("压缩包接受完毕"));
-
-    // 更新进度到10%
+    confTextEdit->appendPlainText(QString::fromUtf8("压缩包接收完毕"));
     progressValue += 10;
     progressbar->setValue(progressValue);
-    
-    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
     QCoreApplication::processEvents();
-
-    // 开始解压
     this->Decompression();
 }
 
@@ -257,25 +275,35 @@ void download:: text(QNetworkReply *reply)
  * - 需要修改解压路径以匹配服务器端ZIP文件结构
  */
 void download::Decompression(){
-    QProcess p;
-    p.setWorkingDirectory(my_savePath);
-    
-    // 使用PowerShell解压ZIP文件
-    p.start("powershell", QStringList() << "-Command" << "Expand-Archive -Path configure.zip -DestinationPath . -Force");
-    p.waitForFinished();
-    p.close();
+    QProcess *p = new QProcess(this);
+    p->setWorkingDirectory(my_savePath);
 
-    confTextEdit->appendPlainText(QString::fromUtf8("压缩包解压完毕"));
+    connect(p, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, p](int exitCode, QProcess::ExitStatus) {
+        if (exitCode != 0) {
+            confTextEdit->appendPlainText("解压失败，退出码: " + QString::number(exitCode));
+            QMessageBox::StandardButton btn = QMessageBox::critical(this,
+                "解压失败", "配置文件解压失败。\n\n是否重试？",
+                QMessageBox::Retry | QMessageBox::Cancel);
+            if (btn == QMessageBox::Retry) {
+                p->deleteLater();
+                this->Decompression();
+                return;
+            }
+        } else {
+            confTextEdit->appendPlainText(QString::fromUtf8("压缩包解压完毕"));
+        }
+        progressValue += 10;
+        progressbar->setValue(progressValue);
+        QCoreApplication::processEvents();
+        p->deleteLater();
+        if (exitCode == 0) this->conf_pack();
+    });
 
-    // 更新进度到20%
-    progressValue += 10;
-    progressbar->setValue(progressValue);
-    
-    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
-    QCoreApplication::processEvents();
-
-    // 开始密钥生成
-    this->conf_pack();
+    QString cmd = "powershell";
+    qDebug() << "准备启动的工具路径:" << cmd;
+    qDebug() << "该文件真的存在吗？:" << QFile::exists(cmd);
+    p->start(cmd, QStringList() << "-Command" << "Expand-Archive -Path configure.zip -DestinationPath . -Force");
 }
 
 /**
@@ -303,9 +331,7 @@ void download::Decompression(){
 void download::conf_pack()
 {
     action = "add";
-    // 从private.txt读取节点IP
     nodeIp = getMess("node_ip");
-    // 从private.txt读取网络名称
     netName = getMess("net_name");
     qDebug()<<nodeIp;
     confTextEdit->appendPlainText("getMess:"+nodeIp);
@@ -314,69 +340,79 @@ void download::conf_pack()
     qDebug()<<action;
     confTextEdit->appendPlainText(action);
 
-    // 创建进程对象
-    QProcess process;
-    process.setWorkingDirectory(confPack_Path);
-    qDebug()<<confPack_Path;
-    process.setProcessChannelMode(QProcess::MergedChannels);
+    QProcess *process = new QProcess(this);
+    QString workDir = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/demo_win/code_win/bin";
+    process->setWorkingDirectory(workDir);
+    qDebug() << "设置工作目录:" << workDir;
+    process->setProcessChannelMode(QProcess::MergedChannels);
 
-    // 启动conf_package.exe，传递7个参数（修复了之前只传3个参数的问题）
-    // 直接运行conf_package.exe，不使用start命令，确保等待完成
-    // 强制使用绝对路径启动，彻底杜绝找不到文件的问题！
-    QString exePath = confPack_Path + "/conf_package.exe";
-    process.start(exePath, QStringList() << SId << token << netName << nodeIp << action << "none" << "none");
-
-    // 检查进程是否成功启动
-    if (!process.waitForStarted(5000)) {
-        qDebug() << "Failed to start conf_package.exe";
-        qDebug() << "Error:" << process.errorString();
-        confTextEdit->appendPlainText("错误：无法启动conf_package.exe");
-        confTextEdit->appendPlainText("错误信息：" + process.errorString());
-        return;
-    }
-
-    qDebug() << "conf_package.exe started successfully";
-
-    // 等待conf_package.exe完成，最多等待30秒（密钥生成+上传需要时间）
-    if (!process.waitForFinished(30000)) {
-        qDebug() << "conf_package.exe timeout or failed";
-        confTextEdit->appendPlainText("警告：密钥生成或上传超时");
-    } else {
-        qDebug() << "conf_package.exe completed with exit code:" << process.exitCode();
-    }
-
-    // 读取进程输出
-    QByteArray conf_output = process.readAll();
-    qDebug() << QString::fromLocal8Bit(conf_output);
-    confTextEdit->appendPlainText(QString::fromLocal8Bit(conf_output));
-
-    // 检查conf_package.exe进程状态
-    QString processName = "conf_package";
-
-    QProcess T_process;
-    T_process.start("tasklist", QStringList() << "/FO" << "CSV" << "/NH");
-    T_process.waitForFinished(3000);
-    QString output = T_process.readAllStandardOutput();
-    QStringList lines = output.split("\r\n",QString::SkipEmptyParts);
-
-    foreach(QString line, lines) {
-        if(line.contains(processName)) {
-            QStringList parts = line.split(",");
-            QString pid = parts.at(1).trimmed();
-            qDebug() << "Found PID:" << pid;
-
+    // 实时读取子进程输出，用于进度回显
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
+        QString text = QString::fromLocal8Bit(process->readAllStandardOutput());
+        confTextEdit->appendPlainText(text);
+        // 输出中有内容就逐步推进进度（20%→80%）
+        if (progressValue < 80) {
+            progressValue += 3;
+            if (progressValue > 80) progressValue = 80;
+            progressbar->setValue(progressValue);
+            QCoreApplication::processEvents();
         }
-    }
+    });
 
-    // 更新进度到80%
-    progressValue += 60;
-    progressbar->setValue(progressValue);
-    
-    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
-    QCoreApplication::processEvents();
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        qDebug() << "conf_package.exe completed with exit code:" << exitCode << "exitStatus:" << exitStatus;
 
-    // 开始服务测试
-    this->test();
+        // 崩溃或异常退出时，dump 子进程全部输出
+        if (exitStatus == QProcess::CrashExit || exitCode != 0) {
+            QString subProcessOutput = process->readAllStandardOutput();
+            qDebug() << "=== conf_package 崩溃/异常退出前吐出的标准日志 ===";
+            qDebug() << subProcessOutput;
+            QString subProcessError = process->readAllStandardError();
+            qDebug() << "=== conf_package 崩溃/异常退出前吐出的错误日志 ===";
+            qDebug() << subProcessError;
+        }
+
+        progressValue = 80;
+        progressbar->setValue(progressValue);
+        QCoreApplication::processEvents();
+        process->deleteLater();
+        this->test();
+    });
+
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
+        // 崩溃/错误发生时，先 dump 子进程临死前打印的全部日志
+        QString subProcessOutput = process->readAllStandardOutput();
+        qDebug() << "=== conf_package 崩溃前吐出的标准日志 ===";
+        qDebug() << subProcessOutput;
+        QString subProcessError = process->readAllStandardError();
+        qDebug() << "=== conf_package 崩溃前吐出的错误日志 ===";
+        qDebug() << subProcessError;
+
+        confTextEdit->appendPlainText("错误：无法启动conf_package.exe - " + process->errorString());
+        QMessageBox::StandardButton btn = QMessageBox::critical(this,
+            "启动失败", "无法启动密钥生成工具: " + process->errorString() + "\n\n是否重试？",
+            QMessageBox::Retry | QMessageBox::Cancel);
+        if (btn == QMessageBox::Retry) {
+            process->deleteLater();
+            this->conf_pack();
+        }
+    });
+
+    // 超时保护（30秒后强制进入下一步）
+    QTimer::singleShot(30000, process, [this, process]() {
+        if (process->state() != QProcess::NotRunning) {
+            confTextEdit->appendPlainText("警告：密钥生成或上传超时，继续流程...");
+            process->kill();
+        }
+    });
+
+    QString exePath = QDir(workDir).absoluteFilePath("conf_package.exe");
+    qDebug() << "准备启动的工具绝对路径:" << exePath;
+    qDebug() << "该文件真的存在吗？:" << QFile::exists(exePath);
+
+    process->start(exePath, QStringList() << SId << token << netName << nodeIp << action << "none" << "none");
+    confTextEdit->appendPlainText("正在生成密钥并上传公钥...");
 }
 
 /**
@@ -402,84 +438,61 @@ void download::conf_pack()
  */
 void download::test(){
     qDebug()<<"test";
-    int flag = 0; // 默认为成功
+    int flag = 0;
 
-    QProcess p;
-    // 构建查询服务状态的命令
-    QString command = QString("sc query tinc.%1").arg(netName);
-    qDebug() << "查询服务命令:" << command;
+    QProcess *p = new QProcess(this);
+    QString command = "sc";
+    QStringList args;
+    args << "query" << QString("tinc.%1").arg(netName);
     
-    p.start(command);
-    
-    // 等待命令完成，设置超时时间为3秒
-    if (!p.waitForFinished(3000)) {
-        qDebug() << "查询服务超时";
-        confTextEdit->appendPlainText("警告：查询Tinc服务状态超时");
-        flag = 0; // 超时也视为配置成功，因为密钥已经生成
-    } else {
-        // 读取命令输出
-        QByteArray outputAry = p.readAllStandardOutput();
-        QByteArray errorAry = p.readAllStandardError();
+    qDebug() << "准备启动的系统工具:" << command;
+    qDebug() << "查询服务命令参数:" << args;
+
+    connect(p, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, p, flag](int, QProcess::ExitStatus) mutable {
+        QByteArray outputAry = p->readAllStandardOutput();
+        QByteArray errorAry = p->readAllStandardError();
         QString output = QString::fromUtf8(outputAry);
         QString error = QString::fromUtf8(errorAry);
-        
+
         qDebug() << "服务查询输出:" << output;
         qDebug() << "服务查询错误:" << error;
-        
         confTextEdit->appendPlainText("服务查询输出:\n" + output);
-        
-        // 检查服务是否存在
-        if (error.contains("1060") || error.contains("指定的服务未安装")) {
-            qDebug() << "Tinc服务不存在，跳过服务测试";
-            confTextEdit->appendPlainText("Tinc服务尚未安装，跳过服务测试");
-            flag = 0; // 服务不存在也视为配置成功
-        } else {
-            // 解析服务状态
-            QStringList lines = output.split("\n");
-            QString stateLine;
 
+        if (error.contains("1060") || error.contains("指定的服务未安装")) {
+            confTextEdit->appendPlainText("Tinc服务尚未安装，跳过服务测试");
+        } else {
+            QStringList lines = output.split("\n");
             for (const QString &line : lines) {
                 if (line.contains("STATE")) {
-                    stateLine = line;
+                    QStringList parts = line.split(":", QString::SkipEmptyParts);
+                    if (parts.size() > 1) {
+                        QString state = parts.at(1).trimmed();
+                        confTextEdit->appendPlainText("Tinc服务状态: " + state);
+                    }
                     break;
                 }
             }
-
-            if (!stateLine.isEmpty()) {
-                // 提取状态码
-                QStringList parts = stateLine.split(":",QString::SkipEmptyParts);
-                QString state = parts.at(1).trimmed();
-
-                // 判断服务状态：4 RUNNING表示运行中
-                if(state == "4 RUNNING") {
-                    flag = 0;
-                    qDebug() << "Tinc服务正在运行";
-                } else {
-                    flag = 0; // 即使服务未运行，也视为配置成功，因为密钥已经生成
-                    qDebug() << "Tinc服务状态:" << state;
-                    confTextEdit->appendPlainText("Tinc服务状态: " + state);
-                }
-            } else {
-                // 无法解析服务状态，但配置已经完成
-                flag = 0;
-                qDebug() << "无法解析服务状态，但配置已完成";
-                confTextEdit->appendPlainText("无法解析服务状态，但配置已完成");
-            }
         }
-    }
 
-    confTextEdit->appendPlainText("服务测试完成");
+        confTextEdit->appendPlainText("服务测试完成");
+        progressValue += 10;
+        progressbar->setValue(progressValue);
+        qDebug()<<"progressValue:" << progressValue;
+        QCoreApplication::processEvents();
+        p->deleteLater();
+        this->Service_reply(flag);
+    });
 
-    // 更新进度到90%
-    progressValue += 10;
-    progressbar->setValue(progressValue);
-    qDebug()<<"progressValue:" << progressValue;
-    
-    // 强制 Qt 立刻重绘界面，进度条和日志就会丝滑地动起来
-    QCoreApplication::processEvents();
+    // 超时保护
+    QTimer::singleShot(5000, p, [this, p]() {
+        if (p->state() != QProcess::NotRunning) {
+            confTextEdit->appendPlainText("警告：查询Tinc服务状态超时");
+            p->kill();
+        }
+    });
 
-    // 上报配置结果
-    this->Service_reply(flag);
+    p->start(command, args);
 }
 
 /**
@@ -541,30 +554,18 @@ void download::Service_reply(int flag)
     addreq.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");
 
     // 发送POST请求
-    QNetworkReply *reply = addReply->post(addreq,dataArray);
+    QNetworkReply *reply = addReply->post(addreq, dataArray);
 
-    // 等待请求完成
-    QEventLoop loop;
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
 
-    // 释放 QNetworkReply 对象，防止内存泄漏
-    reply->deleteLater();
+        confTextEdit->appendPlainText(QString::fromUtf8("添加完成信号已发送"));
+        progressValue += 10;
+        progressbar->setValue(progressValue);
+        qDebug()<<"进度更新到100%";
 
-    confTextEdit->appendPlainText(QString::fromUtf8("添加完成信号已发送"));
-
-    // 更新进度到100%
-    progressValue += 10;
-    progressbar->setValue(progressValue);
-    qDebug()<<"进度更新到100%";
-
-    // 延迟1秒后显示下一步按钮
-    qDebug()<<"准备显示下一步按钮";
-    
-    // 使用 QPointer 保护 this 指针，防止在 lambda 中变成悬空指针
-    QPointer<download> self(this);
-    
-    QTimer::singleShot(1000, [self]() {
+        QPointer<download> self(this);
+        QTimer::singleShot(1000, [self]() {
         qDebug()<<"开始显示下一步按钮";
         
         // 检查对象是否还存在
@@ -694,6 +695,7 @@ void download::Service_reply(int flag)
             });
         });
     });
+    });
 }
 
 /**
@@ -710,17 +712,18 @@ void download::Service_reply(int flag)
  * - 退出后整个配置流程结束
  */
 void download::Daemon(){
-    QProcess process;
-    process.setWorkingDirectory(daemonsPath);
-    // 启动守护进程（后台运行，不创建新窗口）
-    process.start("cmd.exe", QStringList() << "/c" << "start /B Daemons.exe && exit");
-    process.waitForFinished(3000);
+    QProcess *process = new QProcess(this);
+    daemonsPath = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/demo_win/code_win/bin";
+    process->setWorkingDirectory(daemonsPath);
 
-    qDebug()<<"Daemon";
-    confTextEdit->appendPlainText(QString::fromUtf8("配置完成"));
-    confTextEdit->appendPlainText(QString::fromUtf8("守护进程已启动"));
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, process](int, QProcess::ExitStatus) {
+        process->deleteLater();
+        qDebug()<<"Daemon";
+        confTextEdit->appendPlainText(QString::fromUtf8("配置完成"));
+        confTextEdit->appendPlainText(QString::fromUtf8("守护进程已启动"));
 
-    // 清除之前的消息和按钮
+        // 清除之前的消息和按钮
     progressLayout->removeWidget(messageLabel);
     progressLayout->removeWidget(confirmButton);
     progressLayout->removeWidget(cancelButton);
@@ -781,10 +784,16 @@ void download::Daemon(){
                                       "确定要退出程序吗？",
                                       QMessageBox::Yes|QMessageBox::No);
         if (reply == QMessageBox::Yes) {
-            // 使用 exit(0) 来真正结束程序，而不是只退出事件循环
             qApp->exit(0);
         }
     });
+    });
+
+    QString exePath = QDir(daemonsPath).absoluteFilePath("Daemons.exe");
+    qDebug() << "准备启动的守护进程绝对路径:" << exePath;
+    qDebug() << "该文件真的存在吗？:" << QFile::exists(exePath);
+    
+    process->start(exePath);
 }
 
 /**

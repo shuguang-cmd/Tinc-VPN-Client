@@ -67,9 +67,14 @@ public:
 
     QString getMess(QString message)
     {
-        // 从正确的路径读取private.txt文件
-        QString parentpath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows";
-        qDebug() << parentpath;
+        // 动态计算路径，向上跳三级到达 code_win 目录
+        QDir appDir(QCoreApplication::applicationDirPath());
+        appDir.cdUp(); // build
+        appDir.cdUp(); // LoginDialog
+        appDir.cdUp(); // code_win
+        
+        QString parentpath = appDir.absolutePath();
+        qDebug() << "getMess 根目录:" << parentpath;
 
         QFile priFile(parentpath + "/private.txt");
         QString line;
@@ -83,10 +88,9 @@ public:
                 line = stream.readLine();
                 if(line.startsWith(message + ":"))
                 {
-
-                    QStringList linelist = line.split(":");
-                    qDebug()<<linelist[1];
-                    out = QString(linelist[1]);
+                    int colonIndex = line.indexOf(":");
+                    out = line.mid(colonIndex + 1).trimmed();
+                    qDebug() << "getMess 找到字段:" << message << " = " << out;
                     out = removeSymbols2(out,'\"');
                     out = removeSymbols2(out,',');
                     out = removeSymbols2(out,'\"');
@@ -94,6 +98,10 @@ public:
                 }
             }
             priFile.close();
+        }
+        else
+        {
+            qDebug() << "getMess 无法打开文件:" << priFile.fileName();
         }
 
         return out;

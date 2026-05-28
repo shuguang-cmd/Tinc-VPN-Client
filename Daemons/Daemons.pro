@@ -7,7 +7,6 @@
 QT       += core gui
 QT       += network
 QT       += gui-private
-QT       -= gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -46,3 +45,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 
 include(qtservice/src/qtservice.pri)
+
+win32:CONFIG(release, debug|release) {
+    DESTDIR = $$PWD/../bin
+}

@@ -5,6 +5,7 @@
 //#define WIDGET_H
 
 #include <QWidget>
+#include <QApplication>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QDir>
@@ -16,8 +17,13 @@
 #include <QNetworkReply>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QAction>
+#include <QPainter>
+#include <QPixmap>
 
-class DaemonService :public QtService<QCoreApplication>,public QObject
+class DaemonService :public QtService<QApplication>,public QObject
 {
 public:
     DaemonService(int argc, char **argv);
@@ -41,14 +47,14 @@ public:
 
     QString getMess(QString message)
     {
-        // QString programPath = QDir::currentPath();
-        // QFileInfo fileInfo(programPath);
-        // QDir parentDir = fileInfo.dir().path();
-        // QString parentpath = parentDir.path();
-        // qDebug() << parentpath;
-
-        QString parentpath = "D:/Users/laboratory/client_local/windows";
-        qDebug() << parentpath;
+        // 动态计算路径，向上跳三级到达 code_win 目录
+        QDir appDir(QCoreApplication::applicationDirPath());
+        appDir.cdUp(); // build
+        appDir.cdUp(); // Daemons
+        appDir.cdUp(); // code_win
+        
+        QString parentpath = appDir.absolutePath();
+        qDebug() << "Daemon getMess 根目录:" << parentpath;
 
         QFile priFile(parentpath + "/private.txt");
         QString line;
@@ -64,11 +70,13 @@ public:
                 {
 
                     QStringList linelist = line.split(":");
-                    qDebug()<<linelist[1];
-                    out = QString(linelist[1]);
-                    out = removeSymbols(out,'\"');
-                    out = removeSymbols(out,',');
-                    out = removeSymbols(out,'\"');
+                    if (linelist.size() > 1) {
+                        qDebug()<<linelist[1];
+                        out = QString(linelist[1]);
+                        out = removeSymbols(out,'\"');
+                        out = removeSymbols(out,',');
+                        out = removeSymbols(out,'\"');
+                    }
                     break;
                 }
             }
@@ -93,13 +101,13 @@ public:
     void kill_conf(QString processName);
     QString severIp_conf()
     {
-        // QString programPath = QDir::currentPath();
-        // QFileInfo fileInfo(programPath);
-        // QDir parentDir = fileInfo.dir().path();
-        // QString path = parentDir.path();
-
-        QString path = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows";
-        qDebug() << path;
+        QDir appDir(QCoreApplication::applicationDirPath());
+        appDir.cdUp(); // build
+        appDir.cdUp(); // Daemons
+        appDir.cdUp(); // code_win
+        
+        QString path = appDir.absolutePath();
+        qDebug() << "Daemon severIp_conf 根目录:" << path;
         QString ipAddress;
 
         QFile file(path + "/serverIp.conf");
@@ -140,6 +148,7 @@ private:
     QString serverIp ;//接入服务器地址
     QString gatewayIp;//网关地址
     QString sid;//设备ID
+    QString token;//认证令牌
     QString id;//数据库序号
     QString old_nodeName;//旧节点名称
     QString nodeName;//当前节点名称
@@ -150,7 +159,16 @@ private:
     QTimer *timer;//心跳信号
     QTimer *timer0;//ping
     QTimer *timer1;//checkservicestatu
+    QSystemTrayIcon *m_trayIcon;
+    QMenu *m_trayMenu;
+    QAction *m_statusAction;
+    QAction *m_quitAction;
+    bool m_connected;
 
+
+    void setupTrayIcon();
+    void updateTrayStatus(bool connected);
+    QIcon createTrayIcon(const QColor &color);
 
 public slots:
     void sendHeartBeat();

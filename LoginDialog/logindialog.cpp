@@ -54,15 +54,24 @@ Logindialog::Logindialog(QWidget *parent)
     Title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     Title->setMouseTracking(true);
 
+    // Grid layout for input fields and labels
+    QGridLayout *inputGrid = new QGridLayout();
+    inputGrid->setSpacing(10);
+    inputGrid->setContentsMargins(0, 0, 0, 0);
+
+    Sid = new QLabel("节点名:", loginCard);
+    Sid->setObjectName("loginLabel");
     uN = new QLineEdit(loginCard);
     uN->setObjectName("loginInput");
-    uN->setPlaceholderText("请输入用户名...");
+    uN->setPlaceholderText("请输入节点名...");
     uN->setClearButtonEnabled(true);
     uN->setMaxLength(12);
     uN->setMinimumHeight(45);
     uN->setMouseTracking(true);
     uN->installEventFilter(this);
 
+    password = new QLabel("密  码:", loginCard);
+    password->setObjectName("loginLabel");
     pw = new QLineEdit(loginCard);
     pw->setObjectName("loginInput");
     pw->setPlaceholderText("请输入密码...");
@@ -72,6 +81,25 @@ Logindialog::Logindialog(QWidget *parent)
     pw->setMinimumHeight(45);
     pw->setMouseTracking(true);
     pw->installEventFilter(this);
+
+    inputGrid->addWidget(Sid, 0, 0);
+    inputGrid->addWidget(uN, 0, 1);
+    inputGrid->addWidget(password, 1, 0);
+    inputGrid->addWidget(pw, 1, 1);
+
+    rememberCheck = new QCheckBox("记住节点名", loginCard);
+    rememberCheck->setObjectName("rememberCheck");
+    rememberCheck->setMouseTracking(true);
+
+    // 从 QSettings 加载上次记住的节点名
+    QSettings settings("TincVPN", "Client");
+    if (settings.value("rememberNode", false).toBool()) {
+        QString savedNode = settings.value("nodeName", "").toString();
+        if (!savedNode.isEmpty()) {
+            uN->setText(savedNode);
+            rememberCheck->setChecked(true);
+        }
+    }
 
     buttonLayout = new QHBoxLayout();
     buttonLayout->setSpacing(20);
@@ -92,15 +120,21 @@ Logindialog::Logindialog(QWidget *parent)
 
     cardLayout->addWidget(character, 0, Qt::AlignCenter);
     cardLayout->addWidget(Title);
-    cardLayout->addWidget(uN);
-    cardLayout->addWidget(pw);
+    cardLayout->addLayout(inputGrid);
+    cardLayout->addWidget(rememberCheck, 0, Qt::AlignLeft);
     cardLayout->addLayout(buttonLayout);
     cardLayout->addStretch();
 
     mainLayout->addWidget(loginCard, 0, Qt::AlignCenter);
 
-    parentpath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows";
-    qDebug() << parentpath;
+    // 动态计算路径，向上跳三级到达 code_win 目录
+    QDir appDir(QCoreApplication::applicationDirPath());
+    appDir.cdUp(); // build
+    appDir.cdUp(); // LoginDialog
+    appDir.cdUp(); // code_win
+    
+    parentpath = appDir.absolutePath();
+    qDebug() << "Logindialog 根目录:" << parentpath;
 
     connect(loginbtn, &QPushButton::clicked, this, &Logindialog::login);
     connect(exitbtn, &QPushButton::clicked, this, &Logindialog::close);
@@ -122,6 +156,13 @@ Logindialog::Logindialog(QWidget *parent)
             font-weight: bold;
             color: #333333;
             padding: 10px;
+        }
+
+        QLabel#loginLabel {
+            font-size: 14px;
+            color: #555555;
+            font-weight: bold;
+            min-width: 60px;
         }
         
         QLineEdit#loginInput {
@@ -176,6 +217,12 @@ Logindialog::Logindialog(QWidget *parent)
         
         QPushButton#exitButton:pressed {
             background-color: #d0d0d0;
+        }
+
+        QCheckBox#rememberCheck {
+            color: #666666;
+            font-size: 12px;
+            spacing: 6px;
         }
     )";
     this->setStyleSheet(qss);
@@ -247,6 +294,19 @@ void Logindialog::login()
     }
     else
     {
+        // 保存"记住节点名"设置
+        QSettings settings("TincVPN", "Client");
+        settings.setValue("rememberNode", rememberCheck->isChecked());
+        if (rememberCheck->isChecked()) {
+            settings.setValue("nodeName", sid);
+        } else {
+            settings.remove("nodeName");
+        }
+
+        // 登录中状态：禁用按钮，防止重复点击
+        loginbtn->setEnabled(false);
+        loginbtn->setText("登录中...");
+
         QNetworkRequest request;
         request.setUrl(Login_Api);
         QJsonObject json;
@@ -254,11 +314,11 @@ void Logindialog::login()
         json.insert("password",Password);
 
         QJsonDocument document;
-        document.setObject(json);//把json对象提取关键信息转换成数据流
-        QByteArray dataArray = document.toJson(QJsonDocument::Compact);//把数据流转换成QByteArray变量，把JSon数据转换成Post参数
-        request.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");//设置请求头信息，向浏览器声明为Json数据
+        document.setObject(json);
+        QByteArray dataArray = document.toJson(QJsonDocument::Compact);
+        request.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");
 
-        manager->post(request,dataArray);//发出post请求
+        manager->post(request,dataArray);
     }
 
 }
@@ -304,6 +364,8 @@ void Logindialog::getBack(QNetworkReply *reply)
                     qDebug() << "登录失败：" << msg;
                     QMessageBox::critical(this,tr("错误"),tr(msg.toUtf8()));
                     priFile.close();
+                    loginbtn->setEnabled(true);
+                    loginbtn->setText("登录");
                     return;
                 }
 
@@ -364,12 +426,17 @@ void Logindialog::getBack(QNetworkReply *reply)
     if(err != QNetworkReply::NoError)
     {
         QMessageBox::critical(this,tr("错误"),tr(reply->readAll()));
+        loginbtn->setEnabled(true);
+        loginbtn->setText("登录");
     }
     else
     {
         QString rt = QString::fromUtf8(PrivateArray);
-        if(rt == "0")
+        if(rt == "0") {
             QMessageBox::critical(this,tr("错误"),tr("账号或密码错误"));
+            loginbtn->setEnabled(true);
+            loginbtn->setText("登录");
+        }
         else {
             QString line;
             if(priFile.open(QIODevice::ReadOnly))

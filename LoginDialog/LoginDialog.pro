@@ -52,3 +52,7 @@ RESOURCES += \
     background.qrc
     
 CONFIG += console
+
+win32:CONFIG(release, debug|release) {
+    DESTDIR = $$PWD/../bin
+}

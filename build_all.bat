@@ -73,7 +73,15 @@ if %errorlevel% neq 0 (
 )
 
 echo [COPYING] %PROJ_NAME%.exe to deployment folder...
-copy /Y "release\%PROJ_NAME%.exe" "%DEPLOY_ROOT%\%PROJ_NAME%\"
+copy /Y "..\bin\%PROJ_NAME%.exe" "%DEPLOY_ROOT%\%PROJ_NAME%\"
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to copy %PROJ_NAME%.exe!
+    pause
+    exit /b %errorlevel%
+)
+
+echo [DEPLOYING] Qt DLLs for %PROJ_NAME%...
+%QT_BIN%\windeployqt.exe "%DEPLOY_ROOT%\%PROJ_NAME%\%PROJ_NAME%.exe" --no-translations
 
 echo [SUCCESS] %PROJ_NAME% built and deployed.
 echo.

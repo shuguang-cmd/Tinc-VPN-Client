@@ -2,51 +2,64 @@
 
 background::background(QWidget *parent) : QMainWindow(parent)
 {
-    setWindowTitle("T  M  G");
+    setWindowTitle("Tinc VPN Terminal");
     setFixedSize(850, 600);
-
-    // Create a central widget to hold everything and provide the background
-    QWidget *centralWidget = new QWidget(this);
-    setCentralWidget(centralWidget);
 
     QDesktopWidget *desktop = QApplication::desktop();
     this->move((desktop->width() - this->width())/ 2, (desktop->height() - this->height()) /2);
 
+    // Main central widget to hold the left-side branding
+    QWidget *centralWidget = new QWidget(this);
+    setCentralWidget(centralWidget);
+    
+    // Left branding container
+    QWidget *brandingArea = new QWidget(centralWidget);
+    brandingArea->setGeometry(50, 100, 350, 400);
+    
+    QVBoxLayout *brandLayout = new QVBoxLayout(brandingArea);
+    brandLayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    brandLayout->setSpacing(10);
+
+    QLabel *mainTitle = new QLabel("Tinc", brandingArea);
+    mainTitle->setStyleSheet("font-size: 64px; font-weight: bold; color: white;");
+    
+    QLabel *subTitle = new QLabel("内网穿透终端", brandingArea);
+    subTitle->setStyleSheet("font-size: 28px; color: rgba(255, 255, 255, 0.9); font-weight: 500;");
+
+    QLabel *descLabel = new QLabel("安全 · 稳定 · 高效\n构建属于您的虚拟局域网", brandingArea);
+    descLabel->setStyleSheet("font-size: 16px; color: rgba(255, 255, 255, 0.7); line-height: 1.5;");
+    descLabel->setContentsMargins(0, 20, 0, 0);
+
+    brandLayout->addWidget(mainTitle);
+    brandLayout->addWidget(subTitle);
+    brandLayout->addWidget(descLabel);
+
     QString qss = R"(
-        QWidget#centralWidget {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+        QMainWindow {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
                 stop:0 #667eea, stop:1 #764ba2);
         }
     )";
-    centralWidget->setObjectName("centralWidget");
-    centralWidget->setStyleSheet(qss);
+    this->setStyleSheet(qss);
 
-    // Add decorative elements on the left side - parented to centralWidget
-    QLabel *mainTitle = new QLabel("Secure Connect", centralWidget);
-    mainTitle->setGeometry(60, 100, 400, 60);
-    mainTitle->setStyleSheet("font-size: 48px; font-weight: bold; color: white; background: transparent;");
+    childWidget = new Logindialog(this);
 
-    QLabel *subTitle = new QLabel("Your Private Gateway to the World", centralWidget);
-    subTitle->setGeometry(60, 160, 400, 30);
-    subTitle->setStyleSheet("font-size: 18px; color: rgba(255, 255, 255, 0.8); background: transparent;");
-
-    QString listStyle = "font-size: 14px; color: rgba(255, 255, 255, 0.7); background: transparent;";
-    QLabel *feat1 = new QLabel("• High-speed encrypted tunnel", centralWidget);
-    feat1->setGeometry(70, 240, 300, 25);
-    feat1->setStyleSheet(listStyle);
-
-    QLabel *feat2 = new QLabel("• Global network nodes support", centralWidget);
-    feat2->setGeometry(70, 270, 300, 25);
-    feat2->setStyleSheet(listStyle);
-
-    QLabel *feat3 = new QLabel("• One-click intelligent routing", centralWidget);
-    feat3->setGeometry(70, 300, 300, 25);
-    feat3->setStyleSheet(listStyle);
-
-    childWidget = new Logindialog(centralWidget);
+    childWidget->setWindowFlags(childWidget->windowFlags() |Qt::Dialog);
     childWidget->setFixedSize(400, 500);
-    childWidget->move(850 - 400 - 40, (600 - 500) / 2);
+
     childWidget->show();
+
+    // Position the login dialog to the right
+    connect(this, &background::moved, this, [this](){
+            if (childWidget) {
+                QPoint parentPos = this->pos();
+                // Shifted to the right: using 80% of remaining width
+                int xOffset = 420; 
+                QPoint newSwidgePos(parentPos.x() + xOffset, 
+                                    parentPos.y() + (this->height() - childWidget->height()) / 2);
+                childWidget->move(newSwidgePos);
+            }
+        });
 }
 
 void background::moveEvent(QMoveEvent *event)

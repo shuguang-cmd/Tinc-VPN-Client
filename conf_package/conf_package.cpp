@@ -8,7 +8,7 @@
 #include <QThread>
 
 // 全局配置路径：Tinc VPN服务安装目录
-QString my_savePath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/Tinc";
+QString my_savePath;
 // 网络名称：从命令行参数传入，不再硬编码
 QString my_netName = "";
 // 服务器IP：从命令行参数传入，用于上传公钥
@@ -33,6 +33,8 @@ QString my_serverIp = "";
 conf_package::conf_package(const QString& tem_SId,const QString& tem_token,const QString& tem_netName,const QString& tem_nodeIp,const QString& tem_action,const QString& tem_key,const QString& tem_value,const QString& tem_serverIp,QWidget *parent)
     : QMainWindow(parent),SId(tem_SId),token(tem_token),netName(tem_netName),nodeIp(tem_nodeIp),action(tem_action),key(tem_key),value(tem_value),serverIp(tem_serverIp)
 {
+    my_savePath = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/Tinc";
+
     // 初始化全局网络名称为传入的参数值
     my_netName = tem_netName;
     // 初始化全局服务器IP为传入的参数值
@@ -70,8 +72,9 @@ void conf_package::generate_key(){
     qDebug() << "Generating keys...";
     
     // 构建tincd.exe的完整路径
-    QString tincdPath = my_savePath + "\\tincd.exe";
-    qDebug()<< "tincd path:" << tincdPath;
+    QString tincdPath = QDir(my_savePath).absoluteFilePath("tincd.exe");
+    qDebug() << "准备启动的工具绝对路径:" << tincdPath;
+    qDebug() << "该文件真的存在吗？:" << QFile::exists(tincdPath);
     
     // 构建工作目录：Tinc根目录/网络名称
     QString workDir = my_savePath + "\\" + my_netName;
@@ -111,6 +114,8 @@ void conf_package::generate_key(){
     p.setWorkingDirectory(workDir); // 设置工作目录极为重要
     
     qDebug() << "开始启动 tincd -K...";
+    qDebug() << "准备启动的工具绝对路径:" << tincdPath;
+    qDebug() << "该文件真的存在吗？:" << QFile::exists(tincdPath);
     p.start(tincdPath, QStringList() << "-n" << my_netName << "-K");
     
     if (!p.waitForStarted(3000)) {

@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QLabel>
 #include <QEventLoop>
 #include <QObject>
@@ -17,6 +18,7 @@
 #include <QHBoxLayout>
 #include <QGraphicsDropShadowEffect>
 #include <QMouseEvent>
+#include <QSettings>
 #include "AnimatedCharacter.h"
 
 class confg;
@@ -51,6 +53,7 @@ private:
 
     QPushButton *loginbtn;
     QPushButton *exitbtn;
+    QCheckBox *rememberCheck;
     QEventLoop *m_loop;
     QString Token;
     QString sid;

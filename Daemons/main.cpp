@@ -1,5 +1,5 @@
-#include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
 #include <QProcess>
 #include <windows.h>
 #include "DaemonServer.h"
@@ -48,21 +48,8 @@ void logSysInit(QString filePath)
        
 int main(int argc, char *argv[])
 {
-
-    DaemonService Daemonservice(argc, argv);
-
-    logSysInit("D:/Users/laboratory/client_local/windows/log.txt");
-
- //   return Daemonservice.exec();
-
-    try {
-        DaemonService service(argc, argv);
-        return service.exec();
-    } catch (const std::exception &e) {
-        MessageBoxA(NULL, e.what(), "Error", MB_OK);
-    }
-
-
+    DaemonService service(argc, argv);
+    return service.exec();
 }
         
             

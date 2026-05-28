@@ -58,8 +58,8 @@ QString removeSymbols2(QString str, QChar symbol) {
 
 QString getMess(QString message)
 {
-    QString parentpath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows";
-    qDebug() << parentpath;
+    QString parentpath = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows";
+    qDebug() << "conf_package getMess 根目录:" << parentpath;
 
     QFile priFile(parentpath + "/private.txt");
     QString line;

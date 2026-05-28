@@ -7,13 +7,15 @@
 
 using namespace std;
 
-QString savepath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/Tinc";
+extern void logSysInit(QString filePath);
+
+QString savepath;
 QString update_Api;//更新结果Api
 QString alive_Api;//心跳信号Api
 QString confPack_Path;
 
 DaemonService::DaemonService(int argc, char **argv)
-    : QtService<QCoreApplication>(argc, argv, "Daemons")
+    : QtService<QApplication>(argc, argv, "Daemons")
 {
     setServiceDescription("tinc service daemon");
     setServiceFlags(QtServiceBase::CanBeSuspended);
@@ -26,7 +28,19 @@ void DaemonService::start()
 
     qDebug()<<"start";
 
+    // 动态计算路径
+    QDir appDir(QCoreApplication::applicationDirPath());
+    appDir.cdUp(); // build
+    appDir.cdUp(); // Daemons
+    appDir.cdUp(); // code_win
+    
+    QString parentpath = appDir.absolutePath();
+    savepath = QDir(parentpath).absoluteFilePath("Tinc");
+    confPack_Path = QDir(parentpath).absoluteFilePath("conf_package/release");
+    logSysInit(QDir(parentpath).absoluteFilePath("log.txt"));
+
     sid = getMess("sid");
+    token = getMess("token");
     id = getMess("id");
     netName = getMess("net_name");
     old_nodeName = getMess("node_name");
@@ -46,8 +60,6 @@ void DaemonService::start()
     parentDir = fileInfo.dir().path();  // 获取上一级目录的路径
     confPack_Path = parentDir + "/conf_package";*/
 
-    confPack_Path = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/demo_win/demo_setup_win/conf_package";
-
     qDebug()<<sid<<netName<<serverIp<<old_nodeName<<old_nodeIp;
 
     servicename = "tinc."+netName;
@@ -63,6 +75,7 @@ void DaemonService::start()
     connect(heartbeatReq, &QNetworkAccessManager::finished,this,&DaemonService::HeartReply);
 
     this->setTime();
+    this->setupTrayIcon();
 }
 
 /* 重新配置 */
@@ -73,34 +86,20 @@ bool DaemonService::conf_pack(QString netname,QString nodeip)
     qDebug()<<nodeip;
     qDebug()<<action;
 
-    // 调用conf_package
-    QProcess process;
-    process.setWorkingDirectory(confPack_Path);
-    qDebug()<<confPack_Path;
-    process.setProcessChannelMode(QProcess::MergedChannels);  // 将输出与错误合并
-    process.start("cmd.exe", QStringList() << "/c" << QString(" start conf_package.exe %1 %2 %3 && exit\r\n").arg(action).arg(netName).arg(nodeIp).toUtf8());
-    process.waitForFinished(8000);
+    // 直接启动 conf_package.exe（不等待，不阻塞）
+    QString exePath = QDir(confPack_Path).absoluteFilePath("conf_package.exe");
+    qDebug() << "准备启动的工具绝对路径:" << exePath;
+    qDebug() << "该文件真的存在吗？:" << QFile::exists(exePath);
+    
+    // 使用 QProcess 指针以便设置工作目录并正确启动
+    QProcess *p = new QProcess();
+    p->setWorkingDirectory(confPack_Path);
+    qDebug() << "设置工作目录:" << confPack_Path;
+    qDebug() << "工作目录是否存在？:" << QDir(confPack_Path).exists();
 
-    // 执行 tasklist 命令来获取所有进程信息
-    QProcess T_process;
-    T_process.start("tasklist", QStringList() << "/FO" << "CSV" << "/NH");
-    T_process.waitForFinished(3000);
-    QString output = T_process.readAllStandardOutput();
-    QStringList lines = output.split("\r\n",QString::SkipEmptyParts);
+    p->startDetached(exePath, QStringList() << sid << token << netname << nodeip << action << "" << "");
 
-    // 遍历每一行，查找匹配进程名称的行
-    foreach(QString line, lines) {
-        if(line.contains("conf_package")) {
-            // 如果找到匹配的进程名称，提取 PID
-            QStringList parts = line.split(",");
-            QString pid = parts.at(1).trimmed();
-            qDebug() << "Found PID:" << pid;
-
-            //QProcess::execute("taskkill /F /PID " + pid);
-        }
-    }
-
-    qDebug()<<"conf_pack调用";
+    qDebug()<<"conf_pack 已启动";
     return true;
 }
 
@@ -110,8 +109,14 @@ int DaemonService::checkServiceStatus()
     qDebug()<<"check";
 
     QProcess p;
-    QString command = QString("sc query tinc.%1").arg(netName);
-    p.start(command);
+    QString command = "sc";
+    QStringList args;
+    args << "query" << QString("tinc.%1").arg(netName);
+    
+    qDebug() << "准备启动的系统工具:" << command;
+    qDebug() << "命令参数:" << args;
+    
+    p.start(command, args);
     p.waitForFinished(3000);
 
     QByteArray outputAry = p.readAllStandardOutput();
@@ -131,6 +136,8 @@ int DaemonService::checkServiceStatus()
 
     // 按空格切割STATE行，并获取状态部分
     QStringList parts = stateLine.split(":",QString::SkipEmptyParts);
+    if (parts.size() < 2) return 0;
+    
     QString state = parts.at(1).trimmed(); // 第三个部分为状态
     qDebug() << "STATE:" << state;
 
@@ -196,7 +203,7 @@ bool DaemonService::modifyPrivateFile(QString targetKey, QString newValue)
         return false;
     }
 
-    QString filePath = "d:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/private.txt";
+    QString filePath = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../../../private.txt");
 
     //读取整个文本文件
     QFile file(filePath);
@@ -341,7 +348,10 @@ void DaemonService::HeartReply(QNetworkReply* reply)
         qDebug()<<"keepalive response: " + response;
 
         //正常
-        if(response == "1") return;
+        if(response == "1") {
+            updateTrayStatus(true);
+            return;
+        }
 
         //服务端错误
         else if(response == "-1")
@@ -418,9 +428,14 @@ void DaemonService::HeartReply(QNetworkReply* reply)
                             QProcess p;
                             QString node_path = (savepath + "/%1/hosts").arg(netName);
                             p.setWorkingDirectory(node_path);
-                            QString command = QString("rename %1 %2").arg(old_nodeName).arg(nodeName);
-                            qDebug()<<command;
-                            p.start(command);
+                            
+                            QString command = "cmd";
+                            QStringList args;
+                            args << "/c" << "rename" << old_nodeName << nodeName;
+                            qDebug() << "准备启动的系统工具:" << command;
+                            qDebug() << "命令参数:" << args;
+                            
+                            p.start(command, args);
                             p.waitForFinished();
                             qDebug()<<nodeFile.fileName();
 
@@ -449,10 +464,15 @@ void DaemonService::HeartReply(QNetworkReply* reply)
                 }
                     //重启服务进行测试
                     QProcess process(0);
-                    QString sCmd = QString("net start %1").arg(servicename);
-                    qDebug()<< sCmd;
+                    QString sCmd = "net";
+                    QStringList args;
+                    args << "start" << servicename;
+                    
+                    qDebug() << "准备启动的系统工具:" << sCmd;
+                    qDebug() << "命令参数:" << args;
+                    
                     process.setWorkingDirectory(savepath);
-                    process.start(sCmd);
+                    process.start(sCmd, args);
                     process.waitForFinished();
                     if(checkServiceStatus() == 0)
                     {
@@ -486,77 +506,126 @@ void DaemonService::HeartReply(QNetworkReply* reply)
 
 /* 异常检查 */
 void DaemonService::ping(){
+    QProcess *process = new QProcess(this);
+    QString pCmd = "ping";
+    QStringList args;
+    args << gatewayIp << "-n" << "1";
+    
+    qDebug() << "准备启动的系统工具:" << pCmd;
+    qDebug() << "命令参数:" << args;
+    
+    process->setWorkingDirectory(savepath);
 
-    //ping网关
-    QProcess process(0);
-    QString pCmd = QString("ping %1").arg(gatewayIp);
-    qDebug()<< pCmd;
-    process.setWorkingDirectory(savepath);
-    process.start(pCmd);
-    process.waitForFinished();
-    QString outPut = process.readAll();
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, process](int, QProcess::ExitStatus) {
+        QString outPut = process->readAll();
 
-    if(outPut.contains("不可达") || outPut.contains("Unreachable"))
-    {
-        qDebug()<<"ping failure";
+        if(outPut.contains("不可达") || outPut.contains("Unreachable"))
+        {
+            qDebug()<<"ping failure";
+            updateTrayStatus(false);
+            timer->stop();
 
-        timer->stop();
-
-        //ping不通则查询异常
-        QString cfilePath = savepath + "/" + netName + "/tinc.conf";
-        qDebug()<<cfilePath;
-        QFile confFile(cfilePath);
-        //查询conf文件是否存在
-        if(!confFile.exists()){
-            qDebug()<<"The File 'tinc.conf' Is Missing!";
-        }
-
-        //查询hosts文件夹是否存在
-        QString folderPath = savepath + "/" + netName + "/hosts";
-        QDir hostsFolder(folderPath);
-        if(hostsFolder.exists()){
-            //查询节点文件是否存在
-            QString nfilePath = (savepath + "/" + netName + "/hosts/%1").arg(nodeName);
-            qDebug()<<nfilePath;
-            QFile nodeFile(nfilePath);
-            if(!nodeFile.exists()){
-                qDebug()<<"The nodeFile Is Missing!";
+            QString cfilePath = savepath + "/" + netName + "/tinc.conf";
+            QFile confFile(cfilePath);
+            if(!confFile.exists()){
+                qDebug()<<"The File 'tinc.conf' Is Missing!";
             }
 
-            //查询main文件是否存在
-            QString mfilePath = savepath + "/" + netName + "/hosts/main";
+            QString folderPath = savepath + "/" + netName + "/hosts";
+            QDir hostsFolder(folderPath);
+            if(hostsFolder.exists()){
+                QString nfilePath = savepath + "/" + netName + "/hosts/" + nodeName;
+                QFile nodeFile(nfilePath);
+                if(!nodeFile.exists()){
+                    qDebug()<<"The nodeFile Is Missing!";
+                }
+                QFile mainFile(savepath + "/" + netName + "/hosts/main");
+                if(!mainFile.exists()){
+                    qDebug()<<"The File 'main' Is Missing!";
+                }
+            } else {
+                qDebug()<<"The Folder 'hosts' Is Missing!";
+            }
 
-            qDebug()<<mfilePath;
-            QFile mainFile(mfilePath);
-            if(!mainFile.exists()){
-                qDebug()<<"The File 'main' Is Missing!";
+            if(!checkServiceStatus()) {
+                qDebug()<<"Service connection error!";
             }
         }
-        else{
-            qDebug()<<"The Folder 'hosts' Is Missing!";
-        }
-
-        qDebug()<<"here2";
-
-        //查询服务是否有问题
-        if(!checkServiceStatus())
+        else
         {
-            qDebug()<<"Service connection error!";
+            updateTrayStatus(true);
+            if(!timer->isActive()) {
+                timer->start();
+            }
+            qDebug()<<"ping success";
+        }
+        process->deleteLater();
+    });
 
-        }
-    }
-    else
-    {
-        if(!timer->isActive())
-        {
-            timer->start();
-        }
-        qDebug()<<"ping success";
-    }
+    process->start(pCmd, args);
 }
 
 void DaemonService::stop()
 {
     qDebug() << __FUNCTION__;
+    if (m_trayIcon) {
+        m_trayIcon->hide();
+    }
+}
+
+QIcon DaemonService::createTrayIcon(const QColor &color)
+{
+    QPixmap pixmap(32, 32);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setBrush(color);
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(4, 4, 24, 24);
+    painter.end();
+    return QIcon(pixmap);
+}
+
+void DaemonService::setupTrayIcon()
+{
+    m_connected = true;
+    m_trayIcon = new QSystemTrayIcon(this);
+    m_trayIcon->setIcon(createTrayIcon(QColor("#4CAF50")));
+    m_trayIcon->setToolTip(QString("Tinc VPN - %1\n节点: %2").arg(netName).arg(sid));
+
+    m_trayMenu = new QMenu();
+    m_statusAction = m_trayMenu->addAction(QString("网络: %1 | IP: %2").arg(netName).arg(old_nodeIp));
+    m_statusAction->setEnabled(false);
+    m_trayMenu->addSeparator();
+
+    QAction *reconnectAction = m_trayMenu->addAction("重新发送心跳");
+    QObject::connect(reconnectAction, &QAction::triggered, this, [this]() {
+        sendHeartBeat();
+    });
+
+    m_trayMenu->addSeparator();
+    m_quitAction = m_trayMenu->addAction("退出守护进程");
+    QObject::connect(m_quitAction, &QAction::triggered, this, [this]() {
+        m_trayIcon->hide();
+        QCoreApplication::quit();
+    });
+
+    m_trayIcon->setContextMenu(m_trayMenu);
+    m_trayIcon->show();
+}
+
+void DaemonService::updateTrayStatus(bool connected)
+{
+    if (!m_trayIcon || m_connected == connected) return;
+
+    m_connected = connected;
+    if (connected) {
+        m_trayIcon->setIcon(createTrayIcon(QColor("#4CAF50")));
+        m_trayIcon->setToolTip(QString("Tinc VPN - %1 (已连接)\n节点: %2").arg(netName).arg(sid));
+    } else {
+        m_trayIcon->setIcon(createTrayIcon(QColor("#f44336")));
+        m_trayIcon->setToolTip(QString("Tinc VPN - %1 (已断开)\n节点: %2").arg(netName).arg(sid));
+    }
 }
 
