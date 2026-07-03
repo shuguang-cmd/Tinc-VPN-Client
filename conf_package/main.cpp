@@ -58,7 +58,25 @@ QString removeSymbols2(QString str, QChar symbol) {
 
 QString getMess(QString message)
 {
-    QString parentpath = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows";
+    // 动态自适应定位根目录
+    QDir searchDir(QCoreApplication::applicationDirPath());
+    QString parentpath;
+    bool foundRoot = false;
+    for (int i = 0; i < 5; ++i) {
+        // 使用只读的 Tinc/tincd.exe 和 serverIp.conf 进行判定，避免被残留的 private.txt 污染干扰
+        if (QFile::exists(searchDir.absoluteFilePath("Tinc/tincd.exe")) || 
+            QFile::exists(searchDir.absoluteFilePath("serverIp.conf"))) {
+            parentpath = searchDir.absolutePath();
+            foundRoot = true;
+            break;
+        }
+        if (!searchDir.cdUp()) break;
+    }
+    if (!foundRoot) {
+        QDir fallback(QCoreApplication::applicationDirPath());
+        fallback.cdUp();
+        parentpath = fallback.absolutePath();
+    }
     qDebug() << "conf_package getMess 根目录:" << parentpath;
 
     QFile priFile(parentpath + "/private.txt");

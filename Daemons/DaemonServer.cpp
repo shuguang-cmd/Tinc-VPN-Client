@@ -28,16 +28,38 @@ void DaemonService::start()
 
     qDebug()<<"start";
 
-    // 动态计算路径
-    QDir appDir(QCoreApplication::applicationDirPath());
-    appDir.cdUp(); // build
-    appDir.cdUp(); // Daemons
-    appDir.cdUp(); // code_win
-    
-    QString parentpath = appDir.absolutePath();
+    // 动态计算路径，自适应寻找根目录
+    QDir searchDir(QCoreApplication::applicationDirPath());
+    QString parentpath;
+    bool foundRoot = false;
+    for (int i = 0; i < 5; ++i) {
+        // 使用只读的 Tinc/tincd.exe 和 serverIp.conf 进行判定，避免被残留的 private.txt 污染干扰
+        if (QFile::exists(searchDir.absoluteFilePath("Tinc/tincd.exe")) || 
+            QFile::exists(searchDir.absoluteFilePath("serverIp.conf"))) {
+            parentpath = searchDir.absolutePath();
+            foundRoot = true;
+            break;
+        }
+        if (!searchDir.cdUp()) break;
+    }
+    if (!foundRoot) {
+        QDir fallback(QCoreApplication::applicationDirPath());
+        fallback.cdUp();
+        parentpath = fallback.absolutePath();
+    }
+
     savepath = QDir(parentpath).absoluteFilePath("Tinc");
-    confPack_Path = QDir(parentpath).absoluteFilePath("conf_package/release");
     logSysInit(QDir(parentpath).absoluteFilePath("log.txt"));
+
+    // 动态定位 conf_package.exe 所在的目录
+    QString appDirPath = QCoreApplication::applicationDirPath();
+    if (QFile::exists(QDir(appDirPath).absoluteFilePath("conf_package.exe"))) {
+        confPack_Path = appDirPath;
+    } else {
+        QDir parentDir(appDirPath);
+        parentDir.cdUp();
+        confPack_Path = parentDir.absoluteFilePath("conf_package");
+    }
 
     sid = getMess("sid");
     token = getMess("token");
@@ -49,11 +71,14 @@ void DaemonService::start()
     serverIp = severIp_conf();
     qDebug()<<serverIp;
 
-    update_Api = QString("http://%1/api/tinc/client/status/update").arg(serverIp);
+    // 根据 IP 类型动态判断协议（本地/内网用 http，外网用 https）
+    QString protocol = (serverIp.startsWith("127.0.0.1") || serverIp.startsWith("localhost") || serverIp.startsWith("192.168.") || serverIp.startsWith("10.")) ? "http" : "https";
+
+    update_Api = QString("%1://%2/api/tinc/client/status/update").arg(protocol).arg(serverIp);
     qDebug()<<update_Api;
 
     // TODO: 心跳接口尚未在新版API规范中定义，暂保留原地址待更新
-    alive_Api = QString("http://%1/XVntQFJCjc.php/promin/Api/keepalive").arg(serverIp);
+    alive_Api = QString("%1://%2/XVntQFJCjc.php/promin/Api/keepalive").arg(protocol).arg(serverIp);
     qDebug()<<alive_Api;
 
     /*QString programPath = QDir::currentPath();
@@ -204,7 +229,26 @@ bool DaemonService::modifyPrivateFile(QString targetKey, QString newValue)
         return false;
     }
 
-    QString filePath = QDir(QCoreApplication::applicationDirPath()).absoluteFilePath("../../../private.txt");
+    // 动态自适应定位 private.txt 路径
+    QDir searchDir(QCoreApplication::applicationDirPath());
+    QString parentpath;
+    bool foundRoot = false;
+    for (int i = 0; i < 5; ++i) {
+        // 使用只读的 Tinc/tincd.exe 和 serverIp.conf 进行判定，避免被残留的 private.txt 污染干扰
+        if (QFile::exists(searchDir.absoluteFilePath("Tinc/tincd.exe")) || 
+            QFile::exists(searchDir.absoluteFilePath("serverIp.conf"))) {
+            parentpath = searchDir.absolutePath();
+            foundRoot = true;
+            break;
+        }
+        if (!searchDir.cdUp()) break;
+    }
+    if (!foundRoot) {
+        QDir fallback(QCoreApplication::applicationDirPath());
+        fallback.cdUp();
+        parentpath = fallback.absolutePath();
+    }
+    QString filePath = QDir(parentpath).absoluteFilePath("private.txt");
 
     //读取整个文本文件
     QFile file(filePath);
@@ -216,8 +260,8 @@ bool DaemonService::modifyPrivateFile(QString targetKey, QString newValue)
     QString fileContent = file.readAll();
     file.close();
 
-    //定位并修改目标字段
-    QString pattern = QString("\"%1\": \"(.*)\"").arg(targetKey);
+    //定位并修改目标字段 (格式为 key:value)
+    QString pattern = QString("%1:(.*)").arg(targetKey);
     QRegularExpression regex(pattern);
     QRegularExpressionMatch match = regex.match(fileContent);
 
@@ -226,8 +270,8 @@ bool DaemonService::modifyPrivateFile(QString targetKey, QString newValue)
         return false;
     }
 
-    QString oldValue = match.captured(1);
-    QString newLine = QString("\"%1\": \"%2\"").arg(targetKey).arg(newValue);
+    QString oldValue = match.captured(1).trimmed();
+    QString newLine = QString("%1:%2").arg(targetKey).arg(newValue);
     fileContent.replace(match.capturedStart(), match.capturedLength(), newLine);
 
     //写回文件

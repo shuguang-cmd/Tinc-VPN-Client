@@ -1,6 +1,7 @@
-﻿#include "logindialog.h"
+#include "logindialog.h"
 #include "background.h"
 #include "download.h"
+#include "envcheck.h"
 #include <QWidget>
 #include <QApplication>
 #include <QDialog>
@@ -60,6 +61,16 @@ int main(int argc, char *argv[])
             QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 
             QApplication a(argc, argv);
+
+            // -------------------------------------------------------
+            // 启动前环境检查：tincd.exe 存在性 + TAP 网卡驱动安装状态
+            // -------------------------------------------------------
+            EnvCheck envCheck(nullptr);
+            if (!envCheck.runChecks()) {
+                // 致命错误或用户主动退出，终止程序
+                return 1;
+            }
+
             background w;
             int currentScreen = a.desktop()->screenNumber(&w);//程序所在的屏幕编号
             QRect rect = a.desktop()->screenGeometry(currentScreen);//程序所在屏幕尺寸

@@ -31,14 +31,16 @@ SOURCES += \
         logindialog.cpp \
     confg.cpp \
     download.cpp \
-    background.cpp
+    background.cpp \
+    envcheck.cpp
 
 HEADERS += \
         logindialog.h \
     confg.h \
     download.h \
     background.h \
-    AnimatedCharacter.h
+    AnimatedCharacter.h \
+    envcheck.h
 
 FORMS +=
 

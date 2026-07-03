@@ -33,7 +33,27 @@ QString my_serverIp = "";
 conf_package::conf_package(const QString& tem_SId,const QString& tem_token,const QString& tem_netName,const QString& tem_nodeIp,const QString& tem_action,const QString& tem_key,const QString& tem_value,const QString& tem_serverIp,QWidget *parent)
     : QMainWindow(parent),SId(tem_SId),token(tem_token),netName(tem_netName),nodeIp(tem_nodeIp),action(tem_action),key(tem_key),value(tem_value),serverIp(tem_serverIp)
 {
-    my_savePath = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/Tinc";
+    // 动态自适应定位根目录并设置 Tinc 路径
+    QDir searchDir(QCoreApplication::applicationDirPath());
+    QString parentpath;
+    bool foundRoot = false;
+    for (int i = 0; i < 5; ++i) {
+        // 使用只读的 Tinc/tincd.exe 和 serverIp.conf 进行判定，避免被残留的 private.txt 污染干扰
+        if (QFile::exists(searchDir.absoluteFilePath("Tinc/tincd.exe")) || 
+            QFile::exists(searchDir.absoluteFilePath("serverIp.conf"))) {
+            parentpath = searchDir.absolutePath();
+            foundRoot = true;
+            break;
+        }
+        if (!searchDir.cdUp()) break;
+    }
+    if (!foundRoot) {
+        QDir fallback(QCoreApplication::applicationDirPath());
+        fallback.cdUp();
+        parentpath = fallback.absolutePath();
+    }
+    my_savePath = QDir(parentpath).absoluteFilePath("Tinc");
+    qDebug() << "conf_package Tinc 路径:" << my_savePath;
 
     // 初始化全局网络名称为传入的参数值
     my_netName = tem_netName;
@@ -234,7 +254,9 @@ void conf_package::uploadPublicKey(){
     // 新版RESTful API地址
     // POST /api/tinc/client/key/upload
     // 响应：纯文本 (text/plain)，即 server_master 主机配置文件内容
-    QString url = "http://" + my_serverIp + "/api/tinc/client/key/upload";
+    // 根据 IP 类型动态判断协议（本地/内网用 http，外网用 https）
+    QString protocol = (my_serverIp.startsWith("127.0.0.1") || my_serverIp.startsWith("localhost") || my_serverIp.startsWith("192.168.") || my_serverIp.startsWith("10.")) ? "http" : "https";
+    QString url = protocol + "://" + my_serverIp + "/api/tinc/client/key/upload";
     qDebug() << "Upload URL:" << url;
     
     // 新版请求体：只需 sid、content、action 三个字段

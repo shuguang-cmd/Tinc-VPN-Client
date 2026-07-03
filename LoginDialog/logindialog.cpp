@@ -77,7 +77,7 @@ Logindialog::Logindialog(QWidget *parent)
     pw->setPlaceholderText("请输入密码...");
     pw->setEchoMode(QLineEdit::Password);
     pw->setClearButtonEnabled(true);
-    pw->setMaxLength(12);
+    pw->setMaxLength(64);
     pw->setMinimumHeight(45);
     pw->setMouseTracking(true);
     pw->installEventFilter(this);
@@ -127,13 +127,25 @@ Logindialog::Logindialog(QWidget *parent)
 
     mainLayout->addWidget(loginCard, 0, Qt::AlignCenter);
 
-    // 动态计算路径，向上跳三级到达 code_win 目录
-    QDir appDir(QCoreApplication::applicationDirPath());
-    appDir.cdUp(); // build
-    appDir.cdUp(); // LoginDialog
-    appDir.cdUp(); // code_win
-    
-    parentpath = appDir.absolutePath();
+    // 动态计算路径，自适应寻找包含关键配置或目录的根目录
+    QDir searchDir(QCoreApplication::applicationDirPath());
+    bool foundRoot = false;
+    for (int i = 0; i < 5; ++i) {
+        // 使用只读的 Tinc/tincd.exe 和 serverIp.conf 进行判定，避免被残留的 private.txt 污染干扰
+        if (QFile::exists(searchDir.absoluteFilePath("Tinc/tincd.exe")) || 
+            QFile::exists(searchDir.absoluteFilePath("serverIp.conf"))) {
+            parentpath = searchDir.absolutePath();
+            foundRoot = true;
+            break;
+        }
+        if (!searchDir.cdUp()) break;
+    }
+    if (!foundRoot) {
+        // 回退逻辑
+        QDir fallback(QCoreApplication::applicationDirPath());
+        fallback.cdUp();
+        parentpath = fallback.absolutePath();
+    }
     qDebug() << "Logindialog 根目录:" << parentpath;
 
     connect(loginbtn, &QPushButton::clicked, this, &Logindialog::login);
@@ -280,7 +292,8 @@ void Logindialog::login()
     serverIp = severIp_conf();
     qDebug()<<serverIp;
 
-    Login_Api = QString("http://%1/api/tinc/client/login").arg(serverIp);
+    QString protocol = (serverIp.startsWith("127.0.0.1") || serverIp.startsWith("localhost") || serverIp.startsWith("192.168.") || serverIp.startsWith("10.")) ? "http" : "https";
+    Login_Api = QString("%1://%2/api/tinc/client/login").arg(protocol).arg(serverIp);
     qDebug()<<Login_Api;
 
     sid = this->uN->text().remove(QChar('\040'));

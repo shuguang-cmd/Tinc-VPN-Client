@@ -142,20 +142,46 @@ download::download(const QString& sid,const QString& Token,const QString& server
     server_Ip = serverIp;
     qDebug() << SId << token<<server_Ip;
 
-    // 动态计算路径（从可执行文件位置推导）
-    QString appPath = QCoreApplication::applicationDirPath();
-    QDir appDir(appPath);
+    // 动态自适应寻找项目根目录
+    QDir searchDir(QCoreApplication::applicationDirPath());
+    QString parentpath;
+    bool foundRoot = false;
+    for (int i = 0; i < 5; ++i) {
+        // 使用只读的 Tinc/tincd.exe 和 serverIp.conf 进行判定，避免被残留的 private.txt 污染干扰
+        if (QFile::exists(searchDir.absoluteFilePath("Tinc/tincd.exe")) || 
+            QFile::exists(searchDir.absoluteFilePath("serverIp.conf"))) {
+            parentpath = searchDir.absolutePath();
+            foundRoot = true;
+            break;
+        }
+        if (!searchDir.cdUp()) break;
+    }
+    if (!foundRoot) {
+        QDir fallback(QCoreApplication::applicationDirPath());
+        fallback.cdUp();
+        parentpath = fallback.absolutePath();
+    }
     
-    // 假设在开发环境下 appPath 是 .../LoginDialog/build/debug/
-    // 我们需要向上跳三级到达 code_win 目录
-    appDir.cdUp(); // build
-    appDir.cdUp(); // LoginDialog
-    appDir.cdUp(); // code_win
-    
-    QString parentpath = appDir.absolutePath();
     my_savePath = QDir(parentpath).absoluteFilePath("Tinc");
-    confPack_Path = QDir(parentpath).absoluteFilePath("conf_package");
-    daemonsPath = QDir(parentpath).absoluteFilePath("Daemons");
+
+    // 动态定位 conf_package.exe 所在的目录
+    QString appDir = QCoreApplication::applicationDirPath();
+    if (QFile::exists(QDir(appDir).absoluteFilePath("conf_package.exe"))) {
+        confPack_Path = appDir;
+    } else {
+        QDir parentDir(appDir);
+        parentDir.cdUp();
+        confPack_Path = parentDir.absoluteFilePath("conf_package");
+    }
+
+    // 动态定位 Daemons.exe 所在的目录
+    if (QFile::exists(QDir(appDir).absoluteFilePath("Daemons.exe"))) {
+        daemonsPath = appDir;
+    } else {
+        QDir parentDir(appDir);
+        parentDir.cdUp();
+        daemonsPath = parentDir.absoluteFilePath("Daemons");
+    }
     
     qDebug() << "Root Path:" << parentpath;
     qDebug() << "Tinc Path:" << my_savePath;
@@ -166,13 +192,16 @@ download::download(const QString& sid,const QString& Token,const QString& server
     confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 守护进程路径: " +daemonsPath);
     qDebug()<<daemonsPath;
 
+    // 根据 IP 类型动态判断协议（本地/内网用 http，外网用 https）
+    QString protocol = (server_Ip.startsWith("127.0.0.1") || server_Ip.startsWith("localhost") || server_Ip.startsWith("192.168.") || server_Ip.startsWith("10.")) ? "http" : "https";
+
     // 构建下载API地址
-    Download_Api = QString("http://%1/api/tinc/client/config/download").arg(server_Ip);
+    Download_Api = QString("%1://%2/api/tinc/client/config/download").arg(protocol).arg(server_Ip);
     confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 下载API: " +Download_Api);
     qDebug()<<Download_Api;
 
     // 构建上报状态API地址
-    Edit_Api = QString("http://%1/api/tinc/client/status/update").arg(server_Ip);
+    Edit_Api = QString("%1://%2/api/tinc/client/status/update").arg(protocol).arg(server_Ip);
     confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 状态上报API: " + Edit_Api);
     qDebug()<<Edit_Api;
 
@@ -341,10 +370,11 @@ void download::conf_pack()
     confTextEdit->appendPlainText(action);
 
     QProcess *process = new QProcess(this);
-    QString workDir = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/demo_win/code_win/bin";
+    QString workDir = confPack_Path;
     process->setWorkingDirectory(workDir);
     qDebug() << "设置工作目录:" << workDir;
     process->setProcessChannelMode(QProcess::MergedChannels);
+
 
     // 实时读取子进程输出，用于进度回显
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
@@ -712,93 +742,160 @@ void download::Service_reply(int flag)
  * - 退出后整个配置流程结束
  */
 void download::Daemon(){
-    QProcess *process = new QProcess(this);
-    daemonsPath = "D:/Codes/Java/KenDeJi_RuoYi/tinc_cli_gui/windows/demo_win/code_win/bin";
-    process->setWorkingDirectory(daemonsPath);
+    // 使用可执行文件所在目录（Daemons.exe 与 LoginDialog.exe 同目录）
+    daemonsPath = QCoreApplication::applicationDirPath();
 
-    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-        this, [this, process](int, QProcess::ExitStatus) {
-        process->deleteLater();
-        qDebug()<<"Daemon";
-        confTextEdit->appendPlainText(QString::fromUtf8("配置完成"));
-        confTextEdit->appendPlainText(QString::fromUtf8("守护进程已启动"));
+    // 计算 tincd.exe 路径（向上一级找 Tinc/）
+    QDir appDir(QCoreApplication::applicationDirPath());
+    appDir.cdUp(); // bin/ -> code_win/
+    QString tincDir = appDir.absoluteFilePath("Tinc");
+    QString tincdExe = QDir(tincDir).absoluteFilePath("tincd.exe");
 
-        // 清除之前的消息和按钮
-    progressLayout->removeWidget(messageLabel);
-    progressLayout->removeWidget(confirmButton);
-    progressLayout->removeWidget(cancelButton);
-    messageLabel->deleteLater();
-    confirmButton->deleteLater();
-    cancelButton->deleteLater();
+    confTextEdit->appendPlainText(QString::fromUtf8("正在安装 Tinc 服务..."));
+    qDebug() << "tincd 路径:" << tincdExe << "| netName:" << netName;
 
-    // 创建新的消息标签
-    messageLabel = new QLabel("Tinc VPN配置已完成！\n\n守护进程已启动。\n\n点击确定关闭程序。", this);
-    messageLabel->setFont(QFont("宋体", 10));
-    messageLabel->setAlignment(Qt::AlignCenter);
-    messageLabel->setWordWrap(true);
-    messageLabel->setStyleSheet(
-        "QLabel {"
-        "   padding: 20px;"
-        "   background-color: #E8F5E9;"
-        "   border-radius: 5px;"
-        "}"
-        );
+    // -------------------------------------------------------
+    // Step 1: 安装 tinc 服务（tincd.exe -n <netName> --install）
+    // -------------------------------------------------------
+    QProcess *installProc = new QProcess(this);
+    installProc->setWorkingDirectory(tincDir);
 
-    // 创建确定按钮
-    okButton = new QPushButton("确定", this);
-    okButton->setFont(QFont("宋体", 9));
-    okButton->setMinimumSize(100, 30);
-    okButton->setStyleSheet(
-        "QPushButton {"
-        "   background-color: #2196F3;"
-        "   color: white;"
-        "   border: none;"
-        "   border-radius: 3px;"
-        "   padding: 5px;"
-        "}"
-        "QPushButton:hover {"
-        "   background-color: #1976D2;"
-        "}"
-        "QPushButton:pressed {"
-        "   background-color: #0D47A1;"
-        "}"
-        );
+    connect(installProc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, installProc, tincDir, tincdExe](int exitCode, QProcess::ExitStatus) {
 
-    // 创建按钮布局
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    buttonLayout->setSpacing(20);
-    buttonLayout->addWidget(okButton);
+        QString installOut = QString::fromLocal8Bit(installProc->readAllStandardOutput());
+        QString installErr = QString::fromLocal8Bit(installProc->readAllStandardError());
+        qDebug() << "tincd --install 退出码:" << exitCode;
+        qDebug() << "tincd --install 输出:" << installOut;
+        if (!installErr.isEmpty())
+            qDebug() << "tincd --install 错误:" << installErr;
 
-    // 将消息和按钮添加到进度布局
-    progressLayout->addWidget(messageLabel);
-    progressLayout->addLayout(buttonLayout);
-
-    // 更新进度组标题
-    progressGroup->setTitle("配置成功");
-
-    // 连接确定按钮信号
-    connect(okButton, &QPushButton::clicked, this, [this]() {
-        // 显示第二个确认对话框
-        QMessageBox::StandardButton reply;
-        reply = QMessageBox::question(this, "确认退出", 
-                                      "确定要退出程序吗？",
-                                      QMessageBox::Yes|QMessageBox::No);
-        if (reply == QMessageBox::Yes) {
-            qApp->exit(0);
+        // 退出码 0 = 安装成功；1 = 服务已存在（同样可继续）
+        if (exitCode == 0) {
+            confTextEdit->appendPlainText(QString::fromUtf8("Tinc 服务安装成功。"));
+        } else {
+            confTextEdit->appendPlainText(
+                QString::fromUtf8("Tinc 服务安装返回码 %1（可能已安装，继续启动）。").arg(exitCode));
         }
-    });
+
+        installProc->deleteLater();
+
+        // ---------------------------------------------------
+        // Step 2: 启动 tinc 服务（net start tinc.<netName>）
+        // ---------------------------------------------------
+        QString serviceName = QString("tinc.%1").arg(netName);
+        confTextEdit->appendPlainText(QString::fromUtf8("正在启动 Tinc 服务: ") + serviceName);
+        qDebug() << "启动服务:" << serviceName;
+
+        QProcess *startProc = new QProcess(this);
+        connect(startProc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this, startProc, serviceName](int startCode, QProcess::ExitStatus) {
+
+            QString startOut = QString::fromLocal8Bit(startProc->readAllStandardOutput());
+            qDebug() << "net start 退出码:" << startCode << "输出:" << startOut;
+
+            if (startCode == 0) {
+                confTextEdit->appendPlainText(QString::fromUtf8("Tinc 服务启动成功 ✓"));
+            } else if (startOut.contains("已经启动") || startOut.contains("already been started")) {
+                confTextEdit->appendPlainText(QString::fromUtf8("Tinc 服务已在运行中。"));
+            } else {
+                confTextEdit->appendPlainText(
+                    QString::fromUtf8("Tinc 服务启动失败（退出码 %1），请检查配置文件。").arg(startCode));
+            }
+            startProc->deleteLater();
+
+            // ---------------------------------------------------
+            // Step 3: 启动守护进程 Daemons.exe 接管 tinc 监控
+            // ---------------------------------------------------
+            confTextEdit->appendPlainText(QString::fromUtf8("正在启动守护进程..."));
+
+            QProcess *daemonProc = new QProcess(this);
+            daemonProc->setWorkingDirectory(daemonsPath);
+
+            connect(daemonProc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, [this, daemonProc](int, QProcess::ExitStatus) {
+                daemonProc->deleteLater();
+                qDebug() << "Daemon 已启动";
+                confTextEdit->appendPlainText(QString::fromUtf8("配置完成"));
+                confTextEdit->appendPlainText(QString::fromUtf8("守护进程已启动"));
+
+                // 清除之前的消息和按钮
+                progressLayout->removeWidget(messageLabel);
+                progressLayout->removeWidget(confirmButton);
+                progressLayout->removeWidget(cancelButton);
+                messageLabel->deleteLater();
+                confirmButton->deleteLater();
+                cancelButton->deleteLater();
+
+                // 创建新的消息标签
+                messageLabel = new QLabel("Tinc VPN配置已完成！\n\nTinc 服务已启动，守护进程已接管。\n\n点击确定关闭程序。", this);
+                messageLabel->setFont(QFont("宋体", 10));
+                messageLabel->setAlignment(Qt::AlignCenter);
+                messageLabel->setWordWrap(true);
+                messageLabel->setStyleSheet(
+                    "QLabel {"
+                    "   padding: 20px;"
+                    "   background-color: #E8F5E9;"
+                    "   border-radius: 5px;"
+                    "}"
+                    );
+
+                // 创建确定按钮
+                okButton = new QPushButton("确定", this);
+                okButton->setFont(QFont("宋体", 9));
+                okButton->setMinimumSize(100, 30);
+                okButton->setStyleSheet(
+                    "QPushButton {"
+                    "   background-color: #2196F3;"
+                    "   color: white;"
+                    "   border: none;"
+                    "   border-radius: 3px;"
+                    "   padding: 5px;"
+                    "}"
+                    "QPushButton:hover {"
+                    "   background-color: #1976D2;"
+                    "}"
+                    "QPushButton:pressed {"
+                    "   background-color: #0D47A1;"
+                    "}"
+                    );
+
+                QHBoxLayout *buttonLayout = new QHBoxLayout();
+                buttonLayout->setSpacing(20);
+                buttonLayout->addWidget(okButton);
+
+                progressLayout->addWidget(messageLabel);
+                progressLayout->addLayout(buttonLayout);
+                progressGroup->setTitle("配置成功");
+
+                connect(okButton, &QPushButton::clicked, this, [this]() {
+                    QMessageBox::StandardButton reply;
+                    reply = QMessageBox::question(this, "确认退出",
+                                                  "确定要退出程序吗？",
+                                                  QMessageBox::Yes|QMessageBox::No);
+                    if (reply == QMessageBox::Yes) {
+                        qApp->exit(0);
+                    }
+                });
+            });
+
+            QString daemonExe = QDir(daemonsPath).absoluteFilePath("Daemons.exe");
+            qDebug() << "守护进程路径:" << daemonExe << "| 存在:" << QFile::exists(daemonExe);
+            // 使用双参数形式，避免 Qt 5.15 单参数重载已弃用的警告
+            daemonProc->start(daemonExe, QStringList());
+        });
+
+        startProc->start("net", QStringList() << "start" << serviceName);
     });
 
-    QString exePath = QDir(daemonsPath).absoluteFilePath("Daemons.exe");
-    qDebug() << "准备启动的守护进程绝对路径:" << exePath;
-    qDebug() << "该文件真的存在吗？:" << QFile::exists(exePath);
-    
-    process->start(exePath);
+    // 启动 Step 1
+    qDebug() << "安装 tinc 服务，参数: -n" << netName << "--install";
+    installProc->start(tincdExe, QStringList() << "-n" << netName << "--install");
 }
 
 /**
  * @brief 析构函数
- * 
+ *
  * 功能说明：
  * - 清理资源，释放内存
  * - Qt会自动管理子对象
