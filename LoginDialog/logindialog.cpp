@@ -280,7 +280,7 @@ void Logindialog::login()
     serverIp = severIp_conf();
     qDebug()<<serverIp;
 
-    Login_Api = QString("http://%1/XVntQFJCjc.php/myadmin/node/api").arg(serverIp);
+    Login_Api = QString("http://%1/api/tinc/client/login").arg(serverIp);
     qDebug()<<Login_Api;
 
     sid = this->uN->text().remove(QChar('\040'));

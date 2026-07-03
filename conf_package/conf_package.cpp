@@ -1,4 +1,4 @@
-﻿#include "conf_package.h"
+#include "conf_package.h"
 #include <QDir>
 #include <QProcess>
 #include <QDebug>
@@ -210,7 +210,7 @@ void conf_package::generate_key(){
  * - 使用QNetworkAccessManager发送HTTP请求
  * - Content-Type设置为application/json
  * - 请求体为JSON格式，包含公钥内容
- * - 服务器接口：/XVntQFJCjc.php/coreplugs/Clientinterface/exchangeFile
+ * - 服务器接口：/api/tinc/client/key/upload
  */
 void conf_package::uploadPublicKey(){
     qDebug() << "Uploading public key...";
@@ -231,18 +231,18 @@ void conf_package::uploadPublicKey(){
     
     qDebug() << "Public key content:" << publicKeyContent;
     
-    // 构建服务器URL（使用从private.txt读取的动态服务器地址）
-    QString url = "http://" + my_serverIp + "/XVntQFJCjc.php/coreplugs/Clientinterface/exchangeFile";
+    // 新版RESTful API地址
+    // POST /api/tinc/client/key/upload
+    // 响应：纯文本 (text/plain)，即 server_master 主机配置文件内容
+    QString url = "http://" + my_serverIp + "/api/tinc/client/key/upload";
     qDebug() << "Upload URL:" << url;
     
-    // 构造JSON请求体
+    // 新版请求体：只需 sid、content、action 三个字段
+    // token、netName、nodeIp 已从新接口移除
     QJsonObject json;
-    json.insert("sid", SId);           // 节点ID
-    json.insert("token", token);       // 认证令牌
-    json.insert("netName", netName);   // 网络名称
-    json.insert("nodeIp", nodeIp);     // 节点IP
-    json.insert("action", "add");      // 操作类型：添加节点
-    json.insert("content", publicKeyContent); // 公钥内容
+    json.insert("sid", SId);                   // 节点名
+    json.insert("content", publicKeyContent);  // 公钥 PEM 内容（含 Subnet 头）
+    json.insert("action", "exchangeFile");      // 固定操作类型
     
     // 将JSON对象转换为字节数组
     QJsonDocument document;
@@ -260,6 +260,7 @@ void conf_package::uploadPublicKey(){
     
     qDebug() << "Upload request sent";
 }
+
 
 /**
  * @brief 公钥上传完成后的回调函数
@@ -284,10 +285,24 @@ void conf_package::onUploadFinished(QNetworkReply* reply){
     
     // 检查是否有错误
     if (reply->error() == QNetworkReply::NoError) {
-        // 读取服务器响应
+        // 新接口返回的是纯文本（text/plain），即 server_master 主机配置文件内容
         QByteArray response = reply->readAll();
-        qDebug() << "Server response:" << response;
-        qDebug() << "Public key uploaded successfully";
+        QString serverMasterContent = QString::fromUtf8(response);
+        qDebug() << "Server response (server_master content):" << serverMasterContent;
+        
+        // 将服务器返回的主机配置保存为 hosts/server_master 文件
+        QString serverMasterPath = my_savePath + "\\" + my_netName + "\\hosts\\server_master";
+        QFile serverMasterFile(serverMasterPath);
+        if (serverMasterFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+            QTextStream out(&serverMasterFile);
+            out << serverMasterContent;
+            serverMasterFile.close();
+            qDebug() << "server_master file saved to:" << serverMasterPath;
+        } else {
+            qDebug() << "Failed to write server_master file:" << serverMasterFile.errorString();
+        }
+        
+        qDebug() << "Public key uploaded successfully, server_master saved";
     } else {
         // 记录错误信息
         qDebug() << "Upload error:" << reply->errorString();
@@ -300,6 +315,7 @@ void conf_package::onUploadFinished(QNetworkReply* reply){
     // 退出应用程序
     QCoreApplication::quit();
 }
+
 
 /**
  * @brief 析构函数

@@ -167,13 +167,13 @@ download::download(const QString& sid,const QString& Token,const QString& server
     qDebug()<<daemonsPath;
 
     // 构建下载API地址
-    Download_Api = QString("http://%1/XVntQFJCjc.php/coreplugs/coreplugs/api").arg(server_Ip);
+    Download_Api = QString("http://%1/api/tinc/client/config/download").arg(server_Ip);
     confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 下载API: " +Download_Api);
     qDebug()<<Download_Api;
 
-    // 构建编辑API地址
-    Edit_Api = QString("http://%1/XVntQFJCjc.php/promin/Api/editadd_info").arg(server_Ip);
-    confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 编辑API: " + Edit_Api);
+    // 构建上报状态API地址
+    Edit_Api = QString("http://%1/api/tinc/client/status/update").arg(server_Ip);
+    confTextEdit->appendPlainText(currentTime.toString("[hh:mm:ss]") + " 状态上报API: " + Edit_Api);
     qDebug()<<Edit_Api;
 
     // 创建网络访问管理器
@@ -533,7 +533,7 @@ void download::Service_reply(int flag)
     }
     else
     {
-        result = "error";
+        result = "fail"; // 新API规范：失败时使用"fail"而非"error"
     }
 
     // 创建网络访问管理器

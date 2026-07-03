@@ -49,9 +49,10 @@ void DaemonService::start()
     serverIp = severIp_conf();
     qDebug()<<serverIp;
 
-    update_Api = QString("http://%1/XVntQFJCjc.php/promin/Api/editadd_info").arg(serverIp);
+    update_Api = QString("http://%1/api/tinc/client/status/update").arg(serverIp);
     qDebug()<<update_Api;
 
+    // TODO: 心跳接口尚未在新版API规范中定义，暂保留原地址待更新
     alive_Api = QString("http://%1/XVntQFJCjc.php/promin/Api/keepalive").arg(serverIp);
     qDebug()<<alive_Api;
 
@@ -295,7 +296,7 @@ void DaemonService::failureReply(QString details)
 {
     qDebug()<<"edit fail";
     QString type = "edit";
-    QString result = "error";
+    QString result = "fail"; // 新API规范：失败使用"fail"
     QString config_info = nullptr;
 
     editReply = new QNetworkAccessManager;
